@@ -1,0 +1,9 @@
+{
+  "name": "baime",
+  "version": "1.0.0",
+  "description": "BAIME (Bootstrapped AI Methodology Engineering) - Systematic methodology development framework with 19 validated skills and 6 specialized agents for Claude Code",
+  "author": "yaleh",
+  "homepage": "https://github.com/yaleh/baime",
+  "agents": 6,
+  "skills": 19
+}

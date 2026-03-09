@@ -1,0 +1,33 @@
+{
+  "name": "baime",
+  "version": "1.0.0",
+  "agents": [
+    "stage-executor",
+    "project-planner",
+    "iteration-executor",
+    "iteration-prompt-designer",
+    "knowledge-extractor",
+    "workflow-coach"
+  ],
+  "skills": [
+    "agent-prompt-evolution",
+    "api-design",
+    "baseline-quality-assessment",
+    "build-quality-gates",
+    "ci-cd-optimization",
+    "code-refactoring",
+    "cross-cutting-concerns",
+    "dependency-health",
+    "documentation-management",
+    "error-recovery",
+    "knowledge-transfer",
+    "methodology-bootstrapping",
+    "next-step-generation",
+    "observability-instrumentation",
+    "rapid-convergence",
+    "retrospective-validation",
+    "subagent-prompt-construction",
+    "technical-debt-management",
+    "testing-strategy"
+  ]
+}
