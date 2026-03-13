@@ -14,7 +14,7 @@ fail() { echo "  FAIL: $1"; ERRORS=$((ERRORS + 1)); }
 echo ""
 echo "=== JSON Manifest Validation ==="
 
-PLUGIN_JSON="$REPO_ROOT/.claude/.claude-plugin/plugin.json"
+PLUGIN_JSON="$REPO_ROOT/plugin/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
 
 if python3 -c "import json, sys; json.load(open('$PLUGIN_JSON'))" 2>/dev/null; then
@@ -32,7 +32,7 @@ fi
 # ── Version parity ────────────────────────────────────────────────────────────
 
 PLUGIN_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])")
-MARKETPLACE_VERSION=$(python3 -c "import json; print(json.load(open('$MARKETPLACE_JSON'))['version'])")
+MARKETPLACE_VERSION=$(python3 -c "import json; print(json.load(open('$MARKETPLACE_JSON'))['plugins'][0]['version'])")
 
 if [ "$PLUGIN_VERSION" = "$MARKETPLACE_VERSION" ]; then
     pass "Version parity: plugin.json ($PLUGIN_VERSION) == marketplace.json ($MARKETPLACE_VERSION)"
@@ -99,8 +99,8 @@ if missing:
 EOF
 }
 
-AGENTS_DIR="$REPO_ROOT/.claude/agents"
-SKILLS_DIR="$REPO_ROOT/.claude/skills"
+AGENTS_DIR="$REPO_ROOT/plugin/agents"
+SKILLS_DIR="$REPO_ROOT/plugin/skills"
 
 AGENT_COUNT=0
 SKILL_COUNT=0

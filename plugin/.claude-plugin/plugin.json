@@ -1,6 +1,14 @@
 {
   "name": "baime",
   "version": "1.0.0",
+  "description": "BAIME: Systematic methodology development with 19 validated skills and 6 specialized agents",
+  "author": {
+    "name": "Yale Huang",
+    "url": "https://github.com/yaleh"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/yaleh/baime",
+  "repository": "https://github.com/yaleh/baime",
   "agents": [
     "stage-executor",
     "project-planner",
