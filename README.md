@@ -6,12 +6,23 @@ baime provides 19 validated skills and 6 specialized agents that help teams deve
 
 ---
 
-## Install
+## Installation
+
+### Via Claude Code (recommended)
 
 ```bash
-# In Claude Code:
 /plugin marketplace add yaleh/baime
+/plugin install baime@baime
 ```
+
+### Via install script
+
+```bash
+git clone https://github.com/yaleh/baime
+cd baime && ./scripts/install/install.sh
+```
+
+Restart Claude Code after installation.
 
 ---
 
