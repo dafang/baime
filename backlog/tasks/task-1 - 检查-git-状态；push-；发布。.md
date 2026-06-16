@@ -4,7 +4,7 @@ title: 检查 git 状态；push ；发布。
 status: In Progress
 assignee: []
 created_date: '2026-06-16 15:15'
-updated_date: '2026-06-16 15:28'
+updated_date: '2026-06-16 15:30'
 labels: []
 dependencies: []
 ordinal: 1000
@@ -83,18 +83,38 @@ gh release view v1.1.0 --repo yaleh/baime
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [ ] #1 git -C /home/yale/work/baime status --porcelain | grep -v '^??' | diff - /dev/null
-- [ ] #2 git -C /home/yale/work/baime rev-parse --abbrev-ref HEAD | grep -q '^main$'
-- [ ] #3 grep -q '\[1.1.0\]' /home/yale/work/baime/CHANGELOG.md
+- [x] #2 git -C /home/yale/work/baime rev-parse --abbrev-ref HEAD | grep -q '^main$'
+- [x] #3 grep -q '\[1.1.0\]' /home/yale/work/baime/CHANGELOG.md
 - [ ] #4 git -C /home/yale/work/baime log --oneline origin/main..HEAD | grep -q '.'
-- [ ] #5 ! git -C /home/yale/work/baime tag | grep -q '^v1.1.0$'
-- [ ] #6 bash /home/yale/work/baime/scripts/release/release.sh v1.1.0 --dry-run 2>&1 | grep -q 'DRY RUN COMPLETE'
-- [ ] #7 git -C /home/yale/work/baime tag | grep -q '^v1.1.0$'
-- [ ] #8 git -C /home/yale/work/baime ls-remote --tags origin 2>/dev/null | grep -q 'refs/tags/v1.1.0$'
-- [ ] #9 git -C /home/yale/work/baime log --oneline origin/main..HEAD | diff - /dev/null
-- [ ] #10 gh run list --repo yaleh/baime --workflow release.yml --limit 1 --json conclusion --jq '.[0].conclusion' | grep -q 'success'
-- [ ] #11 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
-- [ ] #12 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
+- [x] #5 ! git -C /home/yale/work/baime tag | grep -q '^v1.1.0$'
+- [x] #6 bash /home/yale/work/baime/scripts/release/release.sh v1.1.0 --dry-run 2>&1 | grep -q 'DRY RUN COMPLETE'
+- [x] #7 git -C /home/yale/work/baime tag | grep -q '^v1.1.0$'
+- [x] #8 git -C /home/yale/work/baime ls-remote --tags origin 2>/dev/null | grep -q 'refs/tags/v1.1.0$'
+- [x] #9 git -C /home/yale/work/baime log --oneline origin/main..HEAD | diff - /dev/null
+- [x] #10 gh run list --repo yaleh/baime --workflow release.yml --limit 1 --json conclusion --jq '.[0].conclusion' | grep -q 'success'
+- [x] #11 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
+- [x] #12 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
 <!-- DOD:END -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Implementation Notes
 
@@ -108,4 +128,8 @@ claimed: 2026-06-16T15:27:16Z
 Phase 1 completed: 2026-06-16T15:28:16Z
 
 Phase 2 completed: 2026-06-16T15:28:16Z
+
+Phase 3 completed: 2026-06-16T15:29:45Z
+
+Phase 4 completed: 2026-06-16T15:30:35Z
 <!-- SECTION:NOTES:END -->
