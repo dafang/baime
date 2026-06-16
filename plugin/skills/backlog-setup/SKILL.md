@@ -80,10 +80,9 @@ fi
 
 ### verifyColumns + addColumns
 
-Columns in backlog are status values; a column "exists" if at least one task uses it
-or if it is declared in `backlog/config.yml`. The safest approach is to probe the
-config file directly, then fall back to attempting a column add (which is a no-op if
-the column already exists).
+`backlog column add` does not exist in backlog CLI v1.45+. Statuses must be set by
+editing `backlog/config.yml` directly. Use Python to parse and rewrite the YAML line
+in-place, preserving all other fields.
 
 ```bash
 REQUIRED_COLUMNS=(
@@ -94,23 +93,54 @@ REQUIRED_COLUMNS=(
   "Done"           "Needs Human"
 )
 
-ADDED=()
-EXISTING=()
+# Read existing statuses and compute missing ones via Python
+python3 - <<'PYEOF'
+import re, sys
 
-for COL in "${REQUIRED_COLUMNS[@]}"; do
-  # Check if column is declared in config
-  if grep -qF "$COL" backlog/config.yml 2>/dev/null; then
-    EXISTING+=("$COL")
-  else
-    # Attempt to add; backlog column add is idempotent
-    if backlog column add "$COL" 2>/dev/null; then
-      ADDED+=("$COL")
-    else
-      # Older CLI versions may not have 'column add'; try direct config edit
-      EXISTING+=("$COL")   # assume present if command unavailable
-    fi
-  fi
-done
+CONFIG = "backlog/config.yml"
+REQUIRED = [
+  "Proposal Draft", "Proposal Review",
+  "Plan Draft",     "Plan Review",
+  "Backlog",
+  "Ready",          "In Progress",
+  "Done",           "Needs Human",
+]
+
+with open(CONFIG) as f:
+    content = f.read()
+
+# Extract existing statuses from the YAML array on the statuses line
+m = re.search(r'^statuses:\s*\[([^\]]*)\]', content, re.MULTILINE)
+existing = []
+if m:
+    existing = [s.strip().strip('"') for s in m.group(1).split(',') if s.strip()]
+
+missing = [c for c in REQUIRED if c not in existing]
+merged  = existing + missing
+
+# Rewrite statuses line
+new_statuses = ', '.join(f'"{c}"' for c in merged)
+content = re.sub(
+    r'^statuses:\s*\[.*?\]',
+    f'statuses: [{new_statuses}]',
+    content, flags=re.MULTILINE
+)
+
+# Ensure default_status is "Proposal Draft"
+content = re.sub(
+    r'^default_status:\s*"[^"]*"',
+    'default_status: "Proposal Draft"',
+    content, flags=re.MULTILINE
+)
+
+with open(CONFIG, 'w') as f:
+    f.write(content)
+
+if missing:
+    print("Added: " + ", ".join(missing))
+else:
+    print("All required columns already present.")
+PYEOF
 ```
 
 ### printSummary
@@ -153,10 +183,8 @@ echo "     /loop-backlog"
 
 ## Notes
 
-- `backlog column add` is idempotent on supported CLI versions; re-running this skill
-  is always safe.
-- If the `backlog` CLI version does not support `column add`, columns are created
-  implicitly the first time a task is moved to that status — the skill will still
-  report success and the columns will work correctly.
+- Statuses are managed by direct edit of `backlog/config.yml` (Python regex rewrite);
+  `backlog column add` was removed in CLI v1.45+.
+- The script is idempotent: running it multiple times only adds truly missing columns.
 - The `## L0 Config` section in CLAUDE.md is optional. Without it, `feature-to-backlog`
   and `loop-backlog` auto-detect the project language and choose sensible defaults.
