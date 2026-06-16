@@ -1,10 +1,10 @@
 ---
 id: TASK-1
 title: 检查 git 状态；push ；发布。
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-16 15:15'
-updated_date: '2026-06-16 15:30'
+updated_date: '2026-06-16 15:31'
 labels: []
 dependencies: []
 ordinal: 1000
@@ -82,7 +82,7 @@ gh release view v1.1.0 --repo yaleh/baime
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 git -C /home/yale/work/baime status --porcelain | grep -v '^??' | diff - /dev/null
+- [x] #1 git -C /home/yale/work/baime status --porcelain | grep -v '^??' | diff - /dev/null
 - [x] #2 git -C /home/yale/work/baime rev-parse --abbrev-ref HEAD | grep -q '^main$'
 - [x] #3 grep -q '\[1.1.0\]' /home/yale/work/baime/CHANGELOG.md
 - [ ] #4 git -C /home/yale/work/baime log --oneline origin/main..HEAD | grep -q '.'
@@ -95,26 +95,6 @@ gh release view v1.1.0 --repo yaleh/baime
 - [x] #11 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
 - [x] #12 gh release view v1.1.0 --repo yaleh/baime --json tagName --jq '.tagName' | grep -q 'v1.1.0'
 <!-- DOD:END -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## Implementation Notes
 
@@ -132,4 +112,12 @@ Phase 2 completed: 2026-06-16T15:28:16Z
 Phase 3 completed: 2026-06-16T15:29:45Z
 
 Phase 4 completed: 2026-06-16T15:30:35Z
+
+Completed: 2026-06-16T15:31:20Z
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+commit: (no file changes - release done in main)
+<!-- SECTION:FINAL_SUMMARY:END -->
