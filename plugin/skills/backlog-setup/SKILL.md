@@ -39,7 +39,7 @@ checkCli() =
 initProject :: () → ()
 initProject() =
   | exists("backlog/") → skip   -- already initialised
-  | otherwise          → backlog init
+  | otherwise          → backlog init <projectName> --defaults --agent-instructions none
 
 verifyColumns :: [String] → [String]
 verifyColumns(required) = required ∖ existingColumns()
@@ -71,7 +71,8 @@ echo "✓ backlog CLI found: $(backlog --version 2>/dev/null || echo 'version un
 ```bash
 if [ ! -d "backlog" ]; then
   echo "Initialising backlog project..."
-  backlog init
+  PROJECT_NAME=$(basename "$PWD")
+  backlog init "$PROJECT_NAME" --defaults --agent-instructions none
   echo "✓ backlog project initialised"
 else
   echo "✓ backlog project already exists"
