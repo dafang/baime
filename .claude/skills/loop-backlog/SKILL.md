@@ -39,7 +39,7 @@ workerLoop() = {
   task:   claim(),
 
   if (empty(task)):
-    return: schedule(270, "queue empty") >> Idle,
+    return: schedule(120, "queue empty") >> Idle,
 
   result: withWorktree(task, cfg, execute),
   _:      schedule(delayFor(result), summarise(task, result)),
@@ -101,7 +101,7 @@ merge(T, hash) =
 delayFor :: Outcome → Seconds
 delayFor(Done _)       = 120
 delayFor(NeedsHuman _) = 270
-delayFor(Idle)         = 270
+delayFor(Idle)         = 120
 
 ## Implementation
 
@@ -192,16 +192,26 @@ cd "$WORKTREE"
 ```bash
 TASK_VIEW=$(backlog task view "$TASK_ID" --plain)
 TITLE=$(echo "$TASK_VIEW" | grep -oP '(?<=Task TASK-\d+ - ).+' | head -1)
+
+# Accumulator for final-summary
+EXECUTION_LOG=""
+log_exec() { EXECUTION_LOG="${EXECUTION_LOG}$1\n"; }
 ```
 
 Read the task Description in full. The Description is the sole authority on what to
 do — it may call for code changes, documentation, experiments, or analysis. Follow its
-`## Phase` sections in order. After each phase completes:
+`## Phase` sections in order. After each phase completes, append a structured checkpoint
+that includes the key outputs or decisions from that phase:
 
 ```bash
-backlog task edit "$TASK_ID" \
-  --append-notes "Phase <X> completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+PHASE_NOTE="Phase <X> ✓ $(date -u +%Y-%m-%dT%H:%M:%SZ)
+<one-line summary of what was done or found>"
+backlog task edit "$TASK_ID" --append-notes "$PHASE_NOTE"
+log_exec "$PHASE_NOTE"
 ```
+
+If a phase produced notable command output (e.g. test results, validation output, key
+tool responses), include the relevant excerpt (truncated to ~20 lines) in the note.
 
 Do not invent steps beyond what the Description specifies. Do not assume a task type.
 
@@ -216,15 +226,25 @@ for N in $(seq 0 $((DOD_COUNT - 1))); do
   while true; do
     if eval "$CMD"; then
       backlog task edit "$TASK_ID" --check-dod $N
+      log_exec "DoD #${N} ✓: ${CMD}"
       break
     fi
     ATTEMPTS=$((ATTEMPTS + 1))
+    LAST_ERROR="$(eval "$CMD" 2>&1 || true)"
     if [ $ATTEMPTS -ge 3 ]; then
       STUCK_INDEX=$N
       STUCK_CMD="$CMD"
-      LAST_ERROR="$(eval "$CMD" 2>&1 || true)"
+      log_exec "DoD #${N} ✗ STUCK after 3 attempts: ${CMD}
+Last error:
+${LAST_ERROR}"
       break 2   # → Failure path
     fi
+    # Log the failure and what fix is being attempted
+    FIX_NOTE="DoD #${N} ✗ attempt ${ATTEMPTS}: ${CMD}
+Error: $(echo "$LAST_ERROR" | head -5)
+→ applying fix..."
+    backlog task edit "$TASK_ID" --append-notes "$FIX_NOTE"
+    log_exec "$FIX_NOTE"
     # Fix the issue causing the failure, then retry
   done
 done
@@ -247,18 +267,42 @@ fi
 ```bash
 cd "$REPO_ROOT"
 if git merge --no-ff "$BRANCH" -m "merge: ${TITLE} (${TASK_ID})"; then
+  FINAL_SUMMARY="## Execution Summary
+
+**Result:** Done  
+**Commit:** ${COMMIT_HASH}
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")"
   backlog task edit "$TASK_ID" \
     --status "Done" \
     --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --final-summary "commit: ${COMMIT_HASH}"
+    --final-summary "$FINAL_SUMMARY"
   git worktree remove "$WORKTREE"
   git branch -d "$BRANCH"
   WORK_DONE=true
 else
+  FINAL_SUMMARY="## Execution Summary
+
+**Result:** Needs Human — merge conflict  
+**Branch:** ${BRANCH}  
+**Worktree:** ${WORKTREE}
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")
+
+### Resolution Steps
+\`\`\`
+cd ${REPO_ROOT}
+git mergetool
+git commit
+git worktree remove ${WORKTREE}
+git branch -d ${BRANCH}
+\`\`\`"
   backlog task edit "$TASK_ID" \
     --status "Needs Human" \
-    --append-notes "$(printf 'Merge conflict merging %s into master.\n\nResolve manually:\n  cd %s\n  git mergetool\n  git commit\n  git worktree remove %s\n  git branch -d %s' \
-      "$BRANCH" "$REPO_ROOT" "$WORKTREE" "$BRANCH")"
+    --append-notes "Merge conflict: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --final-summary "$FINAL_SUMMARY"
   echo "⚠️  Merge conflict: $TASK_ID — worktree preserved at $WORKTREE"
   WORK_DONE=false
 fi
@@ -268,10 +312,34 @@ fi
 
 ```bash
 cd "$REPO_ROOT"
+FINAL_SUMMARY="## Execution Summary
+
+**Result:** Needs Human — stuck on DoD #${STUCK_INDEX}  
+**Branch:** ${BRANCH}  
+**Worktree:** ${WORKTREE}
+
+### Failing Command
+\`\`\`
+${STUCK_CMD}
+\`\`\`
+
+### Last Error
+\`\`\`
+${LAST_ERROR}
+\`\`\`
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")
+
+### Cleanup
+\`\`\`
+git worktree remove ${WORKTREE} --force
+git branch -D ${BRANCH}
+\`\`\`"
 backlog task edit "$TASK_ID" \
   --status "Needs Human" \
-  --append-notes "$(printf 'L0 stuck after 3 consecutive failures on DoD #%s:\n\n```\n%s\n```\n\nLast error:\n%s\n\nWorktree preserved at: %s\nBranch: %s\nClean up: git worktree remove %s --force && git branch -D %s' \
-    "$STUCK_INDEX" "$STUCK_CMD" "$LAST_ERROR" "$WORKTREE" "$BRANCH" "$WORKTREE" "$BRANCH")"
+  --append-notes "Stuck on DoD #${STUCK_INDEX}: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --final-summary "$FINAL_SUMMARY"
 echo "❌ Stuck: $TASK_ID (DoD #$STUCK_INDEX)"
 echo "Task moved to Needs Human. Worktree preserved at $WORKTREE"
 WORK_DONE=false
@@ -285,7 +353,7 @@ Always the last action of every invocation. Never skip.
 |------------|-------------|---------------------------------------|
 | Done       | 120         | task completed, check for next item   |
 | NeedsHuman | 270         | escalated, poll at normal cadence     |
-| Idle       | 270         | queue empty, stay within cache window |
+| Idle       | 120         | queue empty, check for new tasks      |
 
 ```
 ScheduleWakeup(
