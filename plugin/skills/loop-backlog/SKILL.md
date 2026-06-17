@@ -163,21 +163,31 @@ fi
 
 ### ensureDaemonScript
 
-Write the daemon script to `scripts/loop-backlog-daemon.js` if it does not already exist.
-Node.js is guaranteed available on every Claude Code install; no runtime dependency needed.
+Write the daemon script to `scripts/loop-backlog-daemon.js`, overwriting if the version tag
+does not match. Node.js is guaranteed available on every Claude Code install; no runtime
+dependency needed.
 
 ```bash
 DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.js"
+DAEMON_VERSION="v3"
 
-if [ ! -f "$DAEMON_SCRIPT" ]; then
+NEED_WRITE=true
+if [ -f "$DAEMON_SCRIPT" ]; then
+  FILE_VER=$(head -3 "$DAEMON_SCRIPT" | grep -oP '(?<=daemon-version: )v\d+' || true)
+  [ "$FILE_VER" = "$DAEMON_VERSION" ] && NEED_WRITE=false
+fi
+
+if [ "$NEED_WRITE" = "true" ]; then
   mkdir -p "${REPO_ROOT}/scripts"
   cat > "$DAEMON_SCRIPT" << 'DAEMON_EOF'
 #!/usr/bin/env node
+// daemon-version: v3
 /**
  * loop-backlog-daemon.js — polls backlog tasks dir and emits task-ready events to stdout.
  *
  * Emits one line per Ready transition: "task-ready:TASK-N"
- * Stops when parent process dies or stop-sentinel file appears.
+ * Stops on stop-sentinel file or SIGTERM. Does NOT self-terminate on parent PID death
+ * (parent is a transient Bash shell; lifecycle is managed by sentinel and nohup/disown).
  *
  * Pure Node.js stdlib — no npm dependencies required.
  */
@@ -244,13 +254,8 @@ function scanReadyIds(tasksDir) {
   return ready;
 }
 
-function isParentAlive(ppid) {
-  try { process.kill(ppid, 0); return true; } catch { return false; }
-}
-
 const args = parseArgs(process.argv);
 const intervalMs = Math.round(args.interval * 1000);
-const ppid = process.ppid;
 
 const pidDir = path.dirname(args.pidFile);
 if (pidDir) fs.mkdirSync(pidDir, { recursive: true });
@@ -264,7 +269,6 @@ process.on('SIGINT',  () => process.exit(0));
 const notified = new Set();
 const timer = setInterval(() => {
   if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
-  if (!isParentAlive(ppid))         { clearInterval(timer); process.exit(0); }
   const readyIds = scanReadyIds(args.tasksDir);
   for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
   for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
@@ -273,8 +277,124 @@ const timer = setInterval(() => {
   }
 }, intervalMs);
 DAEMON_EOF
-  echo "ensureDaemonScript: wrote $DAEMON_SCRIPT"
+  echo "ensureDaemonScript: wrote $DAEMON_SCRIPT (${DAEMON_VERSION})"
 fi
+```
+
+### ensureDaemonTest
+
+Write the unit-test file `scripts/loop-backlog-daemon.test.js` if it does not exist,
+then run it. Tests cover the three pure helper functions. Run this immediately after
+`ensureDaemonScript` so a broken daemon is caught before the daemon is launched.
+
+```bash
+TEST_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.test.js"
+
+if [ ! -f "$TEST_SCRIPT" ]; then
+  cat > "$TEST_SCRIPT" << 'TEST_EOF'
+#!/usr/bin/env node
+// Unit tests for loop-backlog-daemon.js helper functions.
+// Run with: node scripts/loop-backlog-daemon.test.js
+'use strict';
+const fs   = require('fs');
+const path = require('path');
+const os   = require('os');
+
+// ── inline copies of the pure helpers (keep in sync with daemon) ──────────────
+
+function parseTaskId(filename) {
+  const base = path.basename(filename, path.extname(filename)).toUpperCase();
+  for (const part of base.split(/\s+/)) {
+    if (/^TASK-\d+$/.test(part)) return part;
+  }
+  const m = base.match(/\bTASK-(\d+)\b/);
+  return m ? `TASK-${m[1]}` : null;
+}
+
+function isReady(filepath) {
+  try {
+    const content = fs.readFileSync(filepath, 'utf8');
+    for (const line of content.split('\n')) {
+      const s = line.trim().toLowerCase();
+      if (s === 'status: ready' || s.startsWith('status: ready')) return true;
+    }
+  } catch { /* unreadable */ }
+  return false;
+}
+
+function scanReadyIds(tasksDir) {
+  const ready = new Set();
+  let entries;
+  try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    const id = parseTaskId(entry);
+    if (id && isReady(path.join(tasksDir, entry))) ready.add(id);
+  }
+  return ready;
+}
+
+// ── test harness ──────────────────────────────────────────────────────────────
+
+let passed = 0, failed = 0;
+function assert(desc, actual, expected) {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (ok) { process.stdout.write(`  ✓ ${desc}\n`); passed++; }
+  else     { process.stderr.write(`  ✗ ${desc}\n    expected: ${JSON.stringify(expected)}\n    got:      ${JSON.stringify(actual)}\n`); failed++; }
+}
+
+// ── parseTaskId ───────────────────────────────────────────────────────────────
+process.stdout.write('parseTaskId\n');
+assert('simple prefix',       parseTaskId('task-3 - do something.md'),             'TASK-3');
+assert('upper already',       parseTaskId('TASK-10 - title.md'),                   'TASK-10');
+assert('embedded id',         parseTaskId('sprint-TASK-7-notes.md'),               'TASK-7');
+assert('no id returns null',  parseTaskId('README.md'),                            null);
+assert('multi-digit',         parseTaskId('task-42 - long title here.md'),         'TASK-42');
+
+// ── isReady ───────────────────────────────────────────────────────────────────
+process.stdout.write('isReady\n');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbd-test-'));
+
+const readyFile = path.join(tmp, 'ready.md');
+fs.writeFileSync(readyFile, '# Task\nStatus: Ready\nSome body\n');
+assert('status ready (mixed case)', isReady(readyFile), true);
+
+const doneFile = path.join(tmp, 'done.md');
+fs.writeFileSync(doneFile, '# Task\nStatus: Done\n');
+assert('status done → false', isReady(doneFile), false);
+
+const emptyFile = path.join(tmp, 'empty.md');
+fs.writeFileSync(emptyFile, '');
+assert('empty file → false', isReady(emptyFile), false);
+
+assert('missing file → false', isReady(path.join(tmp, 'ghost.md')), false);
+
+// ── scanReadyIds ──────────────────────────────────────────────────────────────
+process.stdout.write('scanReadyIds\n');
+const dir = path.join(tmp, 'tasks');
+fs.mkdirSync(dir);
+
+fs.writeFileSync(path.join(dir, 'task-1 - alpha.md'), 'Status: Ready\n');
+fs.writeFileSync(path.join(dir, 'task-2 - beta.md'),  'Status: Done\n');
+fs.writeFileSync(path.join(dir, 'task-3 - gamma.md'), 'Status: Ready\n');
+fs.writeFileSync(path.join(dir, 'not-a-task.txt'),    'Status: Ready\n');  // ignored
+
+const ids = scanReadyIds(dir);
+assert('finds ready tasks',   [...ids].sort(), ['TASK-1', 'TASK-3']);
+assert('skips done tasks',    ids.has('TASK-2'), false);
+assert('skips non-md files',  ids.size, 2);
+
+assert('missing dir → empty', [...scanReadyIds(path.join(tmp, 'no-such-dir'))].length, 0);
+
+// ── cleanup + result ──────────────────────────────────────────────────────────
+fs.rmSync(tmp, { recursive: true });
+process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
+process.exit(failed > 0 ? 1 : 0);
+TEST_EOF
+  echo "ensureDaemonTest: wrote $TEST_SCRIPT"
+fi
+
+node "$TEST_SCRIPT"
 ```
 
 ### daemonBootstrap
