@@ -16,9 +16,9 @@ import process from 'process';
 
 function parseArgs(argv) {
   const args = {
-    tasksDir: '.backlog/tasks',
-    pidFile: '.backlog/.daemon.pid',
-    stopFile: '.backlog/.loop-stop',
+    tasksDir: 'backlog/tasks',
+    pidFile: 'backlog/.daemon.pid',
+    stopFile: 'backlog/.loop-stop',
     interval: 0.5,
   };
 
@@ -32,9 +32,9 @@ function parseArgs(argv) {
       case '-h':
         process.stdout.write(
           'Usage: loop-backlog-daemon.js [options]\n' +
-          '  --tasks-dir <path>   Directory of task markdown files (default: .backlog/tasks)\n' +
-          '  --pid-file  <path>   PID file path (default: .backlog/.daemon.pid)\n' +
-          '  --stop-file <path>   Stop sentinel path (default: .backlog/.loop-stop)\n' +
+          '  --tasks-dir <path>   Directory of task markdown files (default: backlog/tasks)\n' +
+          '  --pid-file  <path>   PID file path (default: backlog/.daemon.pid)\n' +
+          '  --stop-file <path>   Stop sentinel path (default: backlog/.loop-stop)\n' +
           '  --interval  <secs>  Poll interval in seconds (default: 0.5)\n'
         );
         process.exit(0);

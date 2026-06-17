@@ -1,6 +1,6 @@
 ---
 name: loop-backlog
-description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits task-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the .backlog/.loop-stop sentinel is written."
+description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits task-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the backlog/.loop-stop sentinel is written."
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor
 ---
 
@@ -175,9 +175,9 @@ import process from 'process';
 
 function parseArgs(argv) {
   const args = {
-    tasksDir: '.backlog/tasks',
-    pidFile: '.backlog/.daemon.pid',
-    stopFile: '.backlog/.loop-stop',
+    tasksDir: 'backlog/tasks',
+    pidFile: 'backlog/.daemon.pid',
+    stopFile: 'backlog/.loop-stop',
     interval: 0.5,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -189,9 +189,9 @@ function parseArgs(argv) {
       case '--help': case '-h':
         process.stdout.write(
           'Usage: loop-backlog-daemon.js [options]\n' +
-          '  --tasks-dir <path>  Directory of task markdown files (default: .backlog/tasks)\n' +
-          '  --pid-file  <path>  PID file path (default: .backlog/.daemon.pid)\n' +
-          '  --stop-file <path>  Stop sentinel path (default: .backlog/.loop-stop)\n' +
+          '  --tasks-dir <path>  Directory of task markdown files (default: backlog/tasks)\n' +
+          '  --pid-file  <path>  PID file path (default: backlog/.daemon.pid)\n' +
+          '  --stop-file <path>  Stop sentinel path (default: backlog/.loop-stop)\n' +
           '  --interval  <secs> Poll interval in seconds (default: 0.5)\n'
         );
         process.exit(0);
@@ -517,26 +517,26 @@ WORK_DONE=false
 To stop the worker loop, write the stop sentinel:
 
 ```bash
-touch "${REPO_ROOT}/.backlog/.loop-stop"
+touch "${REPO_ROOT}/backlog/.loop-stop"
 ```
 
-The daemon (`loop-backlog-daemon.py`) detects `.backlog/.loop-stop` and exits.
+The daemon (`loop-backlog-daemon.js`) detects `backlog/.loop-stop` and exits.
 The skill also checks for this file at the top of each iteration and returns `Stopped`
 without re-entering Monitor.
 
 To restart after a shutdown:
 
 ```bash
-rm -f "${REPO_ROOT}/.backlog/.loop-stop"
+rm -f "${REPO_ROOT}/backlog/.loop-stop"
 # then invoke /loop-backlog
 ```
 
 The `daemonBootstrap` section will restart the daemon automatically on the next
-`/loop-backlog` invocation. The PID file (`.backlog/.daemon.pid`) is managed
+`/loop-backlog` invocation. The PID file (`backlog/.daemon.pid`) is managed
 by the daemon itself and removed on exit.
 
 Use `Monitor(persistent=true)` to wait for task-ready events. The Monitor runs for the
 lifetime of the session — no re-arming on timeout needed. The daemon subprocess exits
-only when `.backlog/.loop-stop` is written (or the parent process dies).
+only when `backlog/.loop-stop` is written (or the parent process dies).
 
 To stop the Monitor from outside the skill, call `TaskStop <monitor-task-id>`.
