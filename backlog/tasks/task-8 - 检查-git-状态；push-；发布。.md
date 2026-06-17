@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: 检查 git 状态；push ；发布。
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-17 07:50'
-updated_date: '2026-06-17 08:40'
+updated_date: '2026-06-17 08:43'
 labels: []
 dependencies: []
 ordinal: 1000
@@ -146,4 +146,16 @@ claimed: 2026-06-17T07:59:10Z
 Worker 无法自主执行：任务包含 git push 到 origin/main 和创建 annotated tag v1.2.0，属于不可逆远程操作，需要人类授权后继续。请确认后将任务重新移入 Ready，或手动执行发布流程。
 
 claimed: 2026-06-17T08:40:28Z
+
+Completed: 2026-06-17T08:43:33Z
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## Execution Summary
+
+**Result:** Done
+**Tag:** v1.2.0 on main (91a14e4)
+**Pushed:** origin/main and refs/tags/v1.2.0
+<!-- SECTION:FINAL_SUMMARY:END -->

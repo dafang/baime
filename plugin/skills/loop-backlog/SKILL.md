@@ -1,7 +1,7 @@
 ---
 name: loop-backlog
-description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Polls for Ready tasks, executes by description, commits if changes exist, then self-reschedules via ScheduleWakeup. Invoke /loop-backlog once to start the worker loop; it keeps running until stopped."
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, ScheduleWakeup
+description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits task-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the .backlog/.loop-stop sentinel is written."
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor
 ---
 
 λ() → workerLoop()
@@ -30,19 +30,29 @@ detectLang() =
   | exists("pyproject.toml") ∨ exists("setup.py") → Python
   | otherwise              → Unknown
 
-data Outcome = Done CommitHash | NeedsHuman Reason | Idle
+data Outcome = Done CommitHash | NeedsHuman Reason | Idle | Stopped
 
 workerLoop :: () → Outcome
 workerLoop() = {
   cfg:    loadConfig(),
+  _:      ensureDaemonScript(),
+  _:      daemonBootstrap(),
   _:      reap(inProgressTasks()),
   task:   claim(),
 
+  if (stopSentinel()):
+    return: Stopped,
+
   if (empty(task)):
-    return: schedule(270, "queue empty") >> Idle,
+    -- No task yet; block persistently until daemon emits a task-ready line
+    -- Monitor(persistent=true) never times out — daemon runs until .loop-stop written
+    event: Monitor(persistent=true),
+    if (event matches "task-ready:TASK-*"):
+      return: workerLoop(),      -- re-enter to claim the announced task
+    if (stopSentinel()):
+      return: Stopped,
 
   result: withWorktree(task, cfg, execute),
-  _:      schedule(delayFor(result), summarise(task, result)),
   return: result
 }
 
@@ -80,6 +90,15 @@ execute(T) = {
   _:      ∀(n, cmd) ∈ enumerate(T.dodCommands): verifyDod(T, n, cmd),
   hash:   conditionalCommit(T),
   return: merge(T, hash)
+} | cannotProceed(reason) → escalate(T, reason)
+
+-- escalate: only exit when the worker cannot continue without human input.
+-- Never ask the user a question while a task is In Progress; call escalate() instead.
+escalate :: (Task, Reason) → Outcome
+escalate(T, r) = {
+  setStatus(T, "Needs Human"),
+  appendNote(T, "Escalated: " + r),
+  return: NeedsHuman(r)
 }
 
 verifyDod :: (Task, Int, ShellCmd) → ()
@@ -97,11 +116,6 @@ merge :: (Task, Maybe CommitHash) → Outcome
 merge(T, hash) =
   | mergeNoFF(T.branch) succeeds → markDone(T, hash); removeWorktree(T); Done(hash)
   | otherwise                    → markNeedsHuman(T, "merge conflict"); NeedsHuman("merge conflict")
-
-delayFor :: Outcome → Seconds
-delayFor(Done _)       = 120
-delayFor(NeedsHuman _) = 270
-delayFor(Idle)         = 270
 
 ## Implementation
 
@@ -134,6 +148,159 @@ fi
 [ "$CFG_SYMLINKS" = "none" ] && CFG_SYMLINKS=""
 ```
 
+### ensureDaemonScript
+
+Write the daemon script to `scripts/loop-backlog-daemon.js` if it does not already exist.
+Node.js is guaranteed available on every Claude Code install; no runtime dependency needed.
+
+```bash
+DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.js"
+
+if [ ! -f "$DAEMON_SCRIPT" ]; then
+  mkdir -p "${REPO_ROOT}/scripts"
+  cat > "$DAEMON_SCRIPT" << 'DAEMON_EOF'
+#!/usr/bin/env node
+/**
+ * loop-backlog-daemon.js — polls backlog tasks dir and emits task-ready events to stdout.
+ *
+ * Emits one line per Ready transition: "task-ready:TASK-N"
+ * Stops when parent process dies or stop-sentinel file appears.
+ *
+ * Pure Node.js stdlib — no npm dependencies required.
+ */
+
+import fs from 'fs';
+import path from 'path';
+import process from 'process';
+
+function parseArgs(argv) {
+  const args = {
+    tasksDir: '.backlog/tasks',
+    pidFile: '.backlog/.daemon.pid',
+    stopFile: '.backlog/.loop-stop',
+    interval: 0.5,
+  };
+  for (let i = 2; i < argv.length; i++) {
+    switch (argv[i]) {
+      case '--tasks-dir':  args.tasksDir  = argv[++i]; break;
+      case '--pid-file':   args.pidFile   = argv[++i]; break;
+      case '--stop-file':  args.stopFile  = argv[++i]; break;
+      case '--interval':   args.interval  = parseFloat(argv[++i]); break;
+      case '--help': case '-h':
+        process.stdout.write(
+          'Usage: loop-backlog-daemon.js [options]\n' +
+          '  --tasks-dir <path>  Directory of task markdown files (default: .backlog/tasks)\n' +
+          '  --pid-file  <path>  PID file path (default: .backlog/.daemon.pid)\n' +
+          '  --stop-file <path>  Stop sentinel path (default: .backlog/.loop-stop)\n' +
+          '  --interval  <secs> Poll interval in seconds (default: 0.5)\n'
+        );
+        process.exit(0);
+    }
+  }
+  return args;
+}
+
+function parseTaskId(filename) {
+  const base = path.basename(filename, path.extname(filename)).toUpperCase();
+  for (const part of base.split(/\s+/)) {
+    if (/^TASK-\d+$/.test(part)) return part;
+  }
+  const m = base.match(/\bTASK-(\d+)\b/);
+  return m ? `TASK-${m[1]}` : null;
+}
+
+function isReady(filepath) {
+  try {
+    const content = fs.readFileSync(filepath, 'utf8');
+    for (const line of content.split('\n')) {
+      const s = line.trim().toLowerCase();
+      if (s === 'status: ready' || s.startsWith('status: ready')) return true;
+    }
+  } catch { /* unreadable */ }
+  return false;
+}
+
+function scanReadyIds(tasksDir) {
+  const ready = new Set();
+  let entries;
+  try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    const id = parseTaskId(entry);
+    if (id && isReady(path.join(tasksDir, entry))) ready.add(id);
+  }
+  return ready;
+}
+
+function isParentAlive(ppid) {
+  try { process.kill(ppid, 0); return true; } catch { return false; }
+}
+
+const args = parseArgs(process.argv);
+const intervalMs = Math.round(args.interval * 1000);
+const ppid = process.ppid;
+
+const pidDir = path.dirname(args.pidFile);
+if (pidDir) fs.mkdirSync(pidDir, { recursive: true });
+fs.writeFileSync(args.pidFile, String(process.pid));
+
+function removePid() { try { fs.unlinkSync(args.pidFile); } catch { /* gone */ } }
+process.on('exit', removePid);
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT',  () => process.exit(0));
+
+const notified = new Set();
+const timer = setInterval(() => {
+  if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
+  if (!isParentAlive(ppid))         { clearInterval(timer); process.exit(0); }
+  const readyIds = scanReadyIds(args.tasksDir);
+  for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
+  for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
+    process.stdout.write(`task-ready:${id}\n`);
+    notified.add(id);
+  }
+}, intervalMs);
+DAEMON_EOF
+  echo "ensureDaemonScript: wrote $DAEMON_SCRIPT"
+fi
+```
+
+### daemonBootstrap
+
+Start the task-watcher daemon if not already running. The daemon polls `backlog/tasks/`
+and writes `task-ready:TASK-N` lines to stdout, which Monitor picks up as events.
+
+```bash
+BACKLOG_DIR="${REPO_ROOT}/backlog"
+PID_FILE="${BACKLOG_DIR}/.daemon.pid"
+STOP_FILE="${BACKLOG_DIR}/.loop-stop"
+TASKS_DIR="${BACKLOG_DIR}/tasks"
+
+# Remove stale stop sentinel from a previous run
+rm -f "$STOP_FILE"
+
+# Start daemon only if not already running
+DAEMON_RUNNING=false
+if [ -f "$PID_FILE" ]; then
+  DPID=$(cat "$PID_FILE" 2>/dev/null || true)
+  if [ -n "$DPID" ] && kill -0 "$DPID" 2>/dev/null; then
+    DAEMON_RUNNING=true
+    echo "daemonBootstrap: daemon already running (pid $DPID)"
+  fi
+fi
+
+if [ "$DAEMON_RUNNING" = "false" ]; then
+  node "${REPO_ROOT}/scripts/loop-backlog-daemon.js" \
+    --tasks-dir "$TASKS_DIR" \
+    --pid-file  "$PID_FILE"  \
+    --stop-file "$STOP_FILE" \
+    --interval  0.5 &
+  sleep 0.6
+  DPID=$(cat "$PID_FILE" 2>/dev/null || true)
+  echo "daemonBootstrap: started daemon (pid ${DPID:-unknown})"
+fi
+```
+
 ### reap
 
 ```bash
@@ -163,7 +330,7 @@ backlog task list --status "In Progress" --plain \
 TASK_ID=$(backlog task list --status "Ready" --plain | grep -oP 'TASK-\d+' | head -1)
 ```
 
-If empty: set `QUEUE_EMPTY=true` and skip to **Scheduling**.
+If empty and no stop sentinel: use Monitor (persistent) to wait for the next `task-ready` event.
 
 ```bash
 backlog task edit "$TASK_ID" --status "In Progress" \
@@ -192,16 +359,26 @@ cd "$WORKTREE"
 ```bash
 TASK_VIEW=$(backlog task view "$TASK_ID" --plain)
 TITLE=$(echo "$TASK_VIEW" | grep -oP '(?<=Task TASK-\d+ - ).+' | head -1)
+
+# Accumulator for final-summary
+EXECUTION_LOG=""
+log_exec() { EXECUTION_LOG="${EXECUTION_LOG}$1\n"; }
 ```
 
 Read the task Description in full. The Description is the sole authority on what to
 do — it may call for code changes, documentation, experiments, or analysis. Follow its
-`## Phase` sections in order. After each phase completes:
+`## Phase` sections in order. After each phase completes, append a structured checkpoint
+that includes the key outputs or decisions from that phase:
 
 ```bash
-backlog task edit "$TASK_ID" \
-  --append-notes "Phase <X> completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+PHASE_NOTE="Phase <X> ✓ $(date -u +%Y-%m-%dT%H:%M:%SZ)
+<one-line summary of what was done or found>"
+backlog task edit "$TASK_ID" --append-notes "$PHASE_NOTE"
+log_exec "$PHASE_NOTE"
 ```
+
+If a phase produced notable command output (e.g. test results, validation output, key
+tool responses), include the relevant excerpt (truncated to ~20 lines) in the note.
 
 Do not invent steps beyond what the Description specifies. Do not assume a task type.
 
@@ -216,15 +393,25 @@ for N in $(seq 0 $((DOD_COUNT - 1))); do
   while true; do
     if eval "$CMD"; then
       backlog task edit "$TASK_ID" --check-dod $N
+      log_exec "DoD #${N} ✓: ${CMD}"
       break
     fi
     ATTEMPTS=$((ATTEMPTS + 1))
+    LAST_ERROR="$(eval "$CMD" 2>&1 || true)"
     if [ $ATTEMPTS -ge 3 ]; then
       STUCK_INDEX=$N
       STUCK_CMD="$CMD"
-      LAST_ERROR="$(eval "$CMD" 2>&1 || true)"
+      log_exec "DoD #${N} ✗ STUCK after 3 attempts: ${CMD}
+Last error:
+${LAST_ERROR}"
       break 2   # → Failure path
     fi
+    # Log the failure and what fix is being attempted
+    FIX_NOTE="DoD #${N} ✗ attempt ${ATTEMPTS}: ${CMD}
+Error: $(echo "$LAST_ERROR" | head -5)
+→ applying fix..."
+    backlog task edit "$TASK_ID" --append-notes "$FIX_NOTE"
+    log_exec "$FIX_NOTE"
     # Fix the issue causing the failure, then retry
   done
 done
@@ -247,18 +434,42 @@ fi
 ```bash
 cd "$REPO_ROOT"
 if git merge --no-ff "$BRANCH" -m "merge: ${TITLE} (${TASK_ID})"; then
+  FINAL_SUMMARY="## Execution Summary
+
+**Result:** Done  
+**Commit:** ${COMMIT_HASH}
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")"
   backlog task edit "$TASK_ID" \
     --status "Done" \
     --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --final-summary "commit: ${COMMIT_HASH}"
+    --final-summary "$FINAL_SUMMARY"
   git worktree remove "$WORKTREE"
   git branch -d "$BRANCH"
   WORK_DONE=true
 else
+  FINAL_SUMMARY="## Execution Summary
+
+**Result:** Needs Human — merge conflict  
+**Branch:** ${BRANCH}  
+**Worktree:** ${WORKTREE}
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")
+
+### Resolution Steps
+\`\`\`
+cd ${REPO_ROOT}
+git mergetool
+git commit
+git worktree remove ${WORKTREE}
+git branch -d ${BRANCH}
+\`\`\`"
   backlog task edit "$TASK_ID" \
     --status "Needs Human" \
-    --append-notes "$(printf 'Merge conflict merging %s into master.\n\nResolve manually:\n  cd %s\n  git mergetool\n  git commit\n  git worktree remove %s\n  git branch -d %s' \
-      "$BRANCH" "$REPO_ROOT" "$WORKTREE" "$BRANCH")"
+    --append-notes "Merge conflict: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --final-summary "$FINAL_SUMMARY"
   echo "⚠️  Merge conflict: $TASK_ID — worktree preserved at $WORKTREE"
   WORK_DONE=false
 fi
@@ -268,29 +479,64 @@ fi
 
 ```bash
 cd "$REPO_ROOT"
+FINAL_SUMMARY="## Execution Summary
+
+**Result:** Needs Human — stuck on DoD #${STUCK_INDEX}  
+**Branch:** ${BRANCH}  
+**Worktree:** ${WORKTREE}
+
+### Failing Command
+\`\`\`
+${STUCK_CMD}
+\`\`\`
+
+### Last Error
+\`\`\`
+${LAST_ERROR}
+\`\`\`
+
+### Execution Log
+$(echo -e "$EXECUTION_LOG")
+
+### Cleanup
+\`\`\`
+git worktree remove ${WORKTREE} --force
+git branch -D ${BRANCH}
+\`\`\`"
 backlog task edit "$TASK_ID" \
   --status "Needs Human" \
-  --append-notes "$(printf 'L0 stuck after 3 consecutive failures on DoD #%s:\n\n```\n%s\n```\n\nLast error:\n%s\n\nWorktree preserved at: %s\nBranch: %s\nClean up: git worktree remove %s --force && git branch -D %s' \
-    "$STUCK_INDEX" "$STUCK_CMD" "$LAST_ERROR" "$WORKTREE" "$BRANCH" "$WORKTREE" "$BRANCH")"
+  --append-notes "Stuck on DoD #${STUCK_INDEX}: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --final-summary "$FINAL_SUMMARY"
 echo "❌ Stuck: $TASK_ID (DoD #$STUCK_INDEX)"
 echo "Task moved to Needs Human. Worktree preserved at $WORKTREE"
 WORK_DONE=false
 ```
 
-## Scheduling
+## Shutdown
 
-Always the last action of every invocation. Never skip.
+To stop the worker loop, write the stop sentinel:
 
-| Outcome    | delaySeconds | reason                                |
-|------------|-------------|---------------------------------------|
-| Done       | 120         | task completed, check for next item   |
-| NeedsHuman | 270         | escalated, poll at normal cadence     |
-| Idle       | 270         | queue empty, stay within cache window |
-
+```bash
+touch "${REPO_ROOT}/.backlog/.loop-stop"
 ```
-ScheduleWakeup(
-  delaySeconds = <from table>,
-  reason       = "<one sentence: what happened this iteration>",
-  prompt       = "/loop-backlog"
-)
+
+The daemon (`loop-backlog-daemon.py`) detects `.backlog/.loop-stop` and exits.
+The skill also checks for this file at the top of each iteration and returns `Stopped`
+without re-entering Monitor.
+
+To restart after a shutdown:
+
+```bash
+rm -f "${REPO_ROOT}/.backlog/.loop-stop"
+# then invoke /loop-backlog
 ```
+
+The `daemonBootstrap` section will restart the daemon automatically on the next
+`/loop-backlog` invocation. The PID file (`.backlog/.daemon.pid`) is managed
+by the daemon itself and removed on exit.
+
+Use `Monitor(persistent=true)` to wait for task-ready events. The Monitor runs for the
+lifetime of the session — no re-arming on timeout needed. The daemon subprocess exits
+only when `.backlog/.loop-stop` is written (or the parent process dies).
+
+To stop the Monitor from outside the skill, call `TaskStop <monitor-task-id>`.

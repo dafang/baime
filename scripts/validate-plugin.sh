@@ -154,6 +154,27 @@ else
     fail "Skill count: $SKILL_COUNT (expected $EXPECTED_SKILLS)"
 fi
 
+# ── .claude/skills symlink consistency (ADR-001) ─────────────────────────────
+
+echo ""
+echo "=== .claude/skills Symlink Consistency ==="
+
+CLAUDE_SKILLS_DIR="$REPO_ROOT/.claude/skills"
+for skill_dir in "$SKILLS_DIR"/*/; do
+    skill="$(basename "$skill_dir")"
+    link="${CLAUDE_SKILLS_DIR}/${skill}"
+    expected_target="../../plugin/skills/${skill}"
+    if [ -L "$link" ] && [ "$(readlink "$link")" = "$expected_target" ]; then
+        pass "symlink: .claude/skills/$skill"
+    elif [ -L "$link" ]; then
+        fail "symlink target wrong: .claude/skills/$skill -> $(readlink "$link") (expected $expected_target)"
+    elif [ -d "$link" ]; then
+        fail "real dir (not symlink): .claude/skills/$skill — run scripts/install/setup-skill-symlinks.sh"
+    else
+        fail "missing symlink: .claude/skills/$skill"
+    fi
+done
+
 # ── Forbidden agents check ────────────────────────────────────────────────────
 
 echo ""
