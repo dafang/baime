@@ -16,7 +16,7 @@ Claude Code:
 
 Codex:
 
-Clone this repository, then use it as a local Codex plugin or add a Codex marketplace entry that points at this plugin folder. The Codex plugin manifest is `.codex-plugin/plugin.json`; it exposes shared methodology skills through `.codex/skills/`.
+Clone this repository, then use it as a local Codex plugin or add a Codex marketplace entry that points at this plugin folder. The Codex plugin manifest is `.codex-plugin/plugin.json`; it exposes shared methodology skills from `.claude/skills/`.
 
 ```bash
 git clone https://github.com/yaleh/baime.git
@@ -54,12 +54,12 @@ baime keeps one shared source and exposes host-specific entrypoints around it:
 .claude/skills/*/SKILL.md    shared methodology skill source
 .codex/skills/*              symlinks to ../../.claude/skills/*
 .codex/agents/*.toml         repo-local Codex custom agent adapters
-.codex-plugin/plugin.json    Codex plugin manifest for shared skills
+.codex-plugin/plugin.json    Codex plugin manifest pointing at shared skills
 scripts/install-codex-agents.sh
                               installer for portable Codex custom agents
 ```
 
-Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a compatibility layer, not copied content. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML.
+Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a repo-local compatibility layer for direct repository checks, not copied content. The installed Codex plugin reads skills from `.claude/skills/` so plugin cache installs contain real skill files rather than symlinks. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML.
 
 ---
 
@@ -143,7 +143,7 @@ Codex explicit invocation:
 Use $methodology-bootstrapping to develop a testing strategy for this project.
 ```
 
-In Codex CLI or IDE sessions, you can also use `/skills` or type `$` to select an installed BAIME skill. Claude and Codex both read the shared skill source from `.claude/skills/`; Codex reaches it through `.codex/skills/` symlinks.
+In Codex CLI or IDE sessions, you can also use `/skills` or type `$` to select an installed BAIME skill. Claude and installed Codex plugins both read the shared skill source from `.claude/skills/`; `.codex/skills/` remains a repo-local symlink layer for compatibility checks.
 
 ### Workflow Coaching
 

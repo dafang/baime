@@ -148,10 +148,10 @@ else
     fail "Version mismatch: plugin.json ($PLUGIN_VERSION), marketplace.json ($MARKETPLACE_VERSION), Codex plugin.json ($CODEX_PLUGIN_VERSION)"
 fi
 
-if python3 -c "import json, sys; d=json.load(open('$CODEX_PLUGIN_JSON')); sys.exit(0 if d.get('skills') == './.codex/skills/' else 1)" 2>/dev/null; then
-    pass "Codex plugin skills path is ./.codex/skills/"
+if python3 -c "import json, sys; d=json.load(open('$CODEX_PLUGIN_JSON')); sys.exit(0 if d.get('skills') == './.claude/skills/' else 1)" 2>/dev/null; then
+    pass "Codex plugin skills path is ./.claude/skills/"
 else
-    fail "Codex plugin skills path must be ./.codex/skills/"
+    fail "Codex plugin skills path must be ./.claude/skills/"
 fi
 
 # ── No mcpServers field ───────────────────────────────────────────────────────
