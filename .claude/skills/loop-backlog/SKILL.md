@@ -90,6 +90,15 @@ execute(T) = {
   _:      ∀(n, cmd) ∈ enumerate(T.dodCommands): verifyDod(T, n, cmd),
   hash:   conditionalCommit(T),
   return: merge(T, hash)
+} | cannotProceed(reason) → escalate(T, reason)
+
+-- escalate: only exit when the worker cannot continue without human input.
+-- Never ask the user a question while a task is In Progress; call escalate() instead.
+escalate :: (Task, Reason) → Outcome
+escalate(T, r) = {
+  setStatus(T, "Needs Human"),
+  appendNote(T, "Escalated: " + r),
+  return: NeedsHuman(r)
 }
 
 verifyDod :: (Task, Int, ShellCmd) → ()
