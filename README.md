@@ -41,7 +41,7 @@ For project-scoped agents:
 bash scripts/install-codex-agents.sh --scope project --target /path/to/project
 ```
 
-The installer generates self-contained Codex agent TOML files from the shared `.claude/agents/` source, so installed agents do not depend on paths inside this repository. It also creates six launcher skills such as `$workflow-coach-agent` and `$stage-executor-agent` in the same Codex scope, so users can select agent workflows from Codex's `$` / `/skills` picker. Re-run with `--force` to overwrite existing BAIME agent files and launcher skills.
+The installer generates self-contained Codex agent TOML files from the shared `.claude/agents/` source, so installed agents do not depend on paths inside this repository. It also creates six launcher skills such as `$workflow-coach-agent` and `$stage-executor-agent` in the same Codex scope, so users can select agent workflows from Codex's `$` / `/skills` picker. These launcher skills load the installed agent instructions into the current Codex session; they do not create another subagent. Re-run with `--force` to overwrite existing BAIME agent files and launcher skills.
 
 ---
 
@@ -59,7 +59,7 @@ scripts/install-codex-agents.sh
                               installer for portable Codex custom agents and launcher skills
 ```
 
-Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a repo-local compatibility layer for direct repository checks, not copied content. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML and creates Codex-only `$...-agent` launcher skills in the target Codex skills directory.
+Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a repo-local compatibility layer for direct repository checks, not copied content. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML and creates Codex-only `$...-agent` launcher skills in the target Codex skills directory. The launcher skills are inline adapters for Codex's skill picker: they read the installed TOML and apply its `developer_instructions` in the current turn, avoiding recursive agent creation.
 
 ---
 
@@ -76,7 +76,7 @@ Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/sk
 | `knowledge-extractor` | Extract and codify knowledge from project artifacts and session history |
 | `workflow-coach` | Coach users to optimize their AI coding assistant workflow (works standalone; optionally enriched by meta-cc) |
 
-The Codex agent installer also creates six launcher skills named `{agent}-agent`, such as `$workflow-coach-agent` and `$stage-executor-agent`. These are selection shortcuts that delegate to the matching installed Codex custom agent.
+The Codex agent installer also creates six launcher skills named `{agent}-agent`, such as `$workflow-coach-agent` and `$stage-executor-agent`. These are selection shortcuts that load and apply the matching installed Codex agent instructions in the current session. They explicitly avoid spawning or delegating to another agent.
 
 ### 19 Skills
 

@@ -254,9 +254,26 @@ for slug in expected:
     if f"name: {slug}-agent" not in frontmatter or "description:" not in frontmatter:
         print(f"{skill_file} has invalid frontmatter")
         sys.exit(1)
-    if f"`{slug}` custom agent" not in content:
-        print(f"{skill_file} does not point at {slug} custom agent")
-        sys.exit(1)
+    required_phrases = [
+        "Do not create, spawn, delegate to, or invoke another agent or subagent.",
+        f"Do not invoke `$` skills recursively, including `${slug}-agent` itself.",
+        f"$CODEX_HOME/agents/{slug}.toml",
+        f"$HOME/.codex/agents/{slug}.toml",
+        "Do not fall back to recursive delegation.",
+    ]
+    for phrase in required_phrases:
+        if phrase not in content:
+            print(f"{skill_file} missing anti-recursion launcher phrase: {phrase}")
+            sys.exit(1)
+    forbidden_phrases = [
+        "Spawn or delegate",
+        "spawn the custom agent",
+        "Wait for the custom agent result",
+    ]
+    for phrase in forbidden_phrases:
+        if phrase in content:
+            print(f"{skill_file} contains recursive launcher wording: {phrase}")
+            sys.exit(1)
     if not policy_file.is_file() or "allow_implicit_invocation: false" not in policy_file.read_text():
         print(f"{policy_file} must disable implicit invocation")
         sys.exit(1)

@@ -180,25 +180,27 @@ def render_launcher_skill(slug: str, description: str) -> str:
     name = f"{slug}-agent"
     return f"""---
 name: {name}
-description: Explicit Codex launcher for the BAIME {slug} custom agent. Use when the user selects this skill or asks to run the {slug} agent workflow.
+description: Codex skill-picker entrypoint for the BAIME {slug} workflow profile. Use when the user selects this skill or asks to run the {slug} agent workflow.
 ---
 
-# BAIME {slug} Agent Launcher
+# BAIME {slug} Workflow Entrypoint
 
-Use this skill as a shortcut to run the BAIME `{slug}` custom agent.
+Use this skill as a selectable Codex entrypoint for the BAIME `{slug}` workflow profile.
 
 When invoked:
 
-1. Spawn or delegate to the `{slug}` custom agent.
-2. Pass through the user's request and any relevant files, paths, constraints, and acceptance criteria.
-3. Ask the custom agent to follow its installed `developer_instructions`.
-4. Wait for the custom agent result, then summarize the result back to the user.
+1. Do not create, spawn, delegate to, or invoke another agent or subagent.
+2. Do not invoke `$` skills recursively, including `${name}` itself.
+3. Run the workflow in the current Codex session by loading and applying the installed BAIME `{slug}` agent instructions.
+4. Read the installed TOML from `$CODEX_HOME/agents/{slug}.toml` when `CODEX_HOME` is set; otherwise read `$HOME/.codex/agents/{slug}.toml`.
+5. Extract and follow the TOML `developer_instructions` for this turn, adapting host-specific details to the current Codex environment.
+6. Preserve the user's request, files, paths, constraints, and acceptance criteria while applying those instructions.
 
-Agent purpose:
+Workflow purpose:
 
 {description}
 
-Do not perform the full workflow in this launcher skill unless Codex cannot spawn the custom agent. If delegation is unavailable, explain that the `{slug}` custom agent is required and ask the user to install it with `scripts/install-codex-agents.sh`.
+If the installed TOML file is missing or unreadable, tell the user to run `scripts/install-codex-agents.sh --scope user` or the matching project-scoped install command. Do not fall back to recursive delegation.
 """
 
 for source_file in source_files:
@@ -400,9 +402,26 @@ for slug in expected:
     if "description:" not in frontmatter:
         print(f"{skill_file} missing description", file=sys.stderr)
         sys.exit(1)
-    if f"`{slug}` custom agent" not in content:
-        print(f"{skill_file} does not point at {slug} custom agent", file=sys.stderr)
-        sys.exit(1)
+    required_phrases = [
+        "Do not create, spawn, delegate to, or invoke another agent or subagent.",
+        f"Do not invoke `$` skills recursively, including `${slug}-agent` itself.",
+        f"$CODEX_HOME/agents/{slug}.toml",
+        f"$HOME/.codex/agents/{slug}.toml",
+        "Do not fall back to recursive delegation.",
+    ]
+    for phrase in required_phrases:
+        if phrase not in content:
+            print(f"{skill_file} missing anti-recursion launcher phrase: {phrase}", file=sys.stderr)
+            sys.exit(1)
+    forbidden_phrases = [
+        "Spawn or delegate",
+        "spawn the custom agent",
+        "Wait for the custom agent result",
+    ]
+    for phrase in forbidden_phrases:
+        if phrase in content:
+            print(f"{skill_file} contains recursive launcher wording: {phrase}", file=sys.stderr)
+            sys.exit(1)
     if not policy_file.is_file() or "allow_implicit_invocation: false" not in policy_file.read_text():
         print(f"{policy_file} must disable implicit invocation", file=sys.stderr)
         sys.exit(1)
