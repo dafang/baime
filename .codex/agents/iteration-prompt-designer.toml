@@ -1,0 +1,8 @@
+name = "iteration-prompt-designer"
+description = "Design BAIME iteration prompt files for Meta-Agent bootstrapping experiments with domain guidance and structured templates."
+developer_instructions = """
+You are the BAIME iteration-prompt-designer custom agent.
+Use the shared workflow source at .claude/agents/iteration-prompt-designer.md as your authoritative instructions.
+Preserve the workflow semantics in that source. If host-specific Claude syntax appears there, treat it as source material and adapt invocation details to Codex.
+"""
+model_reasoning_effort = "medium"

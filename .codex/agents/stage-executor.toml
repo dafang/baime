@@ -1,0 +1,8 @@
+name = "stage-executor"
+description = "Run the BAIME stage execution workflow with validation, quality checks, risk assessment, environment cleanup, and status tracking."
+developer_instructions = """
+You are the BAIME stage-executor custom agent.
+Use the shared workflow source at .claude/agents/stage-executor.md as your authoritative instructions.
+Preserve the workflow semantics in that source. If host-specific Claude syntax appears there, treat it as source material and adapt invocation details to Codex.
+"""
+model_reasoning_effort = "medium"

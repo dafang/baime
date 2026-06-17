@@ -1,0 +1,414 @@
+version: 1
+generated_on: 2026-06-16
+scope:
+  agents_expected: 6
+  skills_expected: 19
+  entry_files_expected: 25
+  audited_entry_files:
+    - ".claude/agents/*.md"
+    - ".claude/skills/*/SKILL.md"
+  excluded_recursive_paths:
+    - ".claude/skills/*/reference/**"
+    - ".claude/skills/*/examples/**"
+    - ".claude/skills/*/templates/**"
+decision_values:
+  - keep
+  - replace
+  - move-to-example
+  - host-specific-note
+  - needs-user-decision
+severity_values:
+  - high
+  - medium
+  - low
+files:
+  - path: ".claude/agents/iteration-executor.md"
+    kind: agent
+    status: reviewed
+    findings: []
+
+  - path: ".claude/agents/iteration-prompt-designer.md"
+    kind: agent
+    status: reviewed
+    findings: []
+
+  - path: ".claude/agents/knowledge-extractor.md"
+    kind: agent
+    status: reviewed
+    findings:
+      - pattern: "Claude Code skill directories"
+        location: "line 3"
+        severity: medium
+        decision: replace
+        rationale: "Core description ties extracted artifacts to Claude Code instead of a platform-neutral skill output."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: ".claude/skills/{skill_name}/"
+        location: "line 12"
+        severity: medium
+        decision: replace
+        rationale: "Output directory is hard-coded to the Claude source layout; later wording should distinguish shared source from host-specific install paths."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "task_tool(subagent_type=\"knowledge-extractor\")"
+        location: "line 37"
+        severity: high
+        decision: replace
+        rationale: "Invocation contract depends on Claude Task tool subagent syntax and will not map directly to Codex skills."
+        follow_up_feature: "baime-invocation-language-update"
+
+  - path: ".claude/agents/project-planner.md"
+    kind: agent
+    status: reviewed
+    findings: []
+
+  - path: ".claude/agents/stage-executor.md"
+    kind: agent
+    status: reviewed
+    findings: []
+
+  - path: ".claude/agents/workflow-coach.md"
+    kind: agent
+    status: reviewed
+    findings:
+      - pattern: "Claude Code workflow"
+        location: "lines 3, 8, 35, 40, 54, 226"
+        severity: medium
+        decision: replace
+        rationale: "The workflow coach is framed as Claude Code-only even though the coaching model can apply to Codex workflows too."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "@file / @dir / @agent- syntax"
+        location: "lines 44, 70, 73, 79, 81, 85"
+        severity: medium
+        decision: replace
+        rationale: "Claude-specific context and agent invocation syntax should become platform-neutral terms, with host-specific examples split out."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "subagents as delegation tool"
+        location: "lines 90, 91, 98, 171"
+        severity: medium
+        decision: replace
+        rationale: "Delegation guidance should refer to workflow skills or host-supported delegation, not only Claude subagents."
+        follow_up_feature: "baime-agent-as-skill-adapters"
+      - pattern: "mcp_meta_cc optional enrichment"
+        location: "lines 264-275"
+        severity: low
+        decision: host-specific-note
+        rationale: "The section is explicitly optional, but it should remain marked as a Claude/meta-cc enrichment rather than a cross-platform requirement."
+        follow_up_feature: "baime-docs-dual-platform"
+
+  - path: ".claude/skills/agent-prompt-evolution/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/api-design/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+      - pattern: "Frontmatter (name, description, allowed-tools)"
+        location: "line 210"
+        severity: low
+        decision: host-specific-note
+        rationale: "This is a skill-completeness checklist item, but it still reinforces Claude-specific frontmatter as a normal requirement."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/baseline-quality-assessment/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/build-quality-gates/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings: []
+
+  - path: ".claude/skills/ci-cd-optimization/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/code-refactoring/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/cross-cutting-concerns/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/dependency-health/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/documentation-management/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "Claude Code projects"
+        location: "lines 3, 9"
+        severity: medium
+        decision: replace
+        rationale: "The methodology is described as Claude Code-only even though documentation practices can be platform-neutral."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+      - pattern: ".claude/skills/documentation-management paths"
+        location: "lines 52, 69, 72"
+        severity: medium
+        decision: replace
+        rationale: "Quick-start commands hard-code the Claude source path; later docs should use a shared source path or host-specific examples."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "Claude Code Documentation link"
+        location: "line 580"
+        severity: low
+        decision: move-to-example
+        rationale: "The link can remain useful, but it belongs in a host-specific resources section once Codex support is documented."
+        follow_up_feature: "baime-docs-dual-platform"
+
+  - path: ".claude/skills/error-recovery/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/knowledge-transfer/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/methodology-bootstrapping/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+      - pattern: "AI agents (like Claude Code)"
+        location: "line 23"
+        severity: medium
+        decision: replace
+        rationale: "The core BAIME explanation should refer to AI coding agents generally, with Claude and Codex as examples."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "specialized Claude Code subagents"
+        location: "line 87"
+        severity: high
+        decision: replace
+        rationale: "This section is the main bridge from methodology skill to workflow agents and must become compatible with Codex workflow skills."
+        follow_up_feature: "baime-agent-as-skill-adapters"
+      - pattern: "Task tool with subagent_type"
+        location: "lines 101, 129, 160"
+        severity: high
+        decision: replace
+        rationale: "Invocation examples depend on Claude Task tool syntax and need host-neutral or host-split invocation examples."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "production-ready Claude Code skills"
+        location: "lines 152, 168, 184"
+        severity: medium
+        decision: replace
+        rationale: "Knowledge extraction output should be described as reusable BAIME skills, with host packaging handled separately."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: ".claude/skills/ output path"
+        location: "line 182"
+        severity: medium
+        decision: replace
+        rationale: "Lifecycle diagram hard-codes the Claude source path and should distinguish source layout from platform entrypoints."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "iteration-* subagent usage"
+        location: "lines 380, 383, 453, 468, 507"
+        severity: high
+        decision: replace
+        rationale: "Repeated workflow instructions assume Claude subagents; Codex should refer to workflow skills or adapters."
+        follow_up_feature: "baime-agent-as-skill-adapters"
+      - pattern: "asking Claude Code for assistance"
+        location: "line 565"
+        severity: low
+        decision: replace
+        rationale: "Terminology guidance should not name only one host when the package is intended to support Claude and Codex."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "@file:line-range references"
+        location: "line 609"
+        severity: low
+        decision: move-to-example
+        rationale: "Claude-specific file reference syntax is useful as an example, but the core prompt-quality dimension should be platform-neutral."
+        follow_up_feature: "baime-docs-dual-platform"
+
+  - path: ".claude/skills/next-step-generation/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "@file references"
+        location: "lines 57, 104"
+        severity: medium
+        decision: replace
+        rationale: "Generated prompts should describe attaching or referencing relevant files in a host-neutral way, with Claude syntax kept as an example if needed."
+        follow_up_feature: "baime-invocation-language-update"
+
+  - path: ".claude/skills/observability-instrumentation/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/rapid-convergence/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/retrospective-validation/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+      - pattern: "For Claude Code / meta-cc"
+        location: "line 91"
+        severity: low
+        decision: host-specific-note
+        rationale: "This data source example is host-specific and should remain labeled as such while non-Claude data sources stay available."
+        follow_up_feature: "baime-docs-dual-platform"
+
+  - path: ".claude/skills/subagent-prompt-construction/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "Claude Code-integrated subagent prompts"
+        location: "line 3"
+        severity: high
+        decision: needs-user-decision
+        rationale: "This skill's domain may be intrinsically Claude subagent prompt construction, or it may be broadened to platform-neutral workflow-skill prompt construction; that scope choice affects the entire skill."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "subagent_prompt and subagent template"
+        location: "lines 11, 26"
+        severity: medium
+        decision: needs-user-decision
+        rationale: "Core output type and artifact names are subagent-specific; preserving them is valid only if this remains a Claude-focused methodology skill."
+        follow_up_feature: "baime-invocation-language-update"
+      - pattern: "Claude Code feature integration"
+        location: "lines 29, 34"
+        severity: high
+        decision: needs-user-decision
+        rationale: "The referenced integration patterns are host-specific; decide whether to keep the skill as a Claude-specific specialty or split host examples from a neutral prompt-construction core."
+        follow_up_feature: "baime-docs-dual-platform"
+
+  - path: ".claude/skills/technical-debt-management/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+  - path: ".claude/skills/testing-strategy/SKILL.md"
+    kind: skill
+    status: reviewed
+    findings:
+      - pattern: "allowed-tools frontmatter"
+        location: "line 4"
+        severity: medium
+        decision: host-specific-note
+        rationale: "allowed-tools is Claude-specific skill metadata; Codex compatibility should either tolerate it or move host-specific tool constraints into notes consistently."
+        follow_up_feature: "baime-shared-skill-frontmatter"
+
+follow_up_scope:
+  - path: ".claude/skills/agent-prompt-evolution/examples/"
+    reason: "Contains historical Claude/.claude deployment examples outside the 25 entry-file scope."
+  - path: ".claude/skills/agent-prompt-evolution/templates/"
+    reason: "Contains Claude Code version fields outside the 25 entry-file scope."
+  - path: ".claude/skills/documentation-management/README.md"
+    reason: "Contains .claude paths and Claude Code distribution language outside the entry SKILL.md."
+  - path: ".claude/skills/documentation-management/reference/"
+    reason: "Contains a large BAIME documentation example with Claude subagent and .claude path instructions."
+  - path: ".claude/skills/documentation-management/VALIDATION-REPORT.md"
+    reason: "Contains Claude Code target-user and validator language outside the entry SKILL.md."
+  - path: ".claude/skills/error-recovery/examples/"
+    reason: "Contains Claude Code hook and project examples outside the entry SKILL.md."
+  - path: ".claude/skills/methodology-bootstrapping/reference/"
+    reason: "Contains .claude agent references and host-specific examples outside the entry SKILL.md."
+  - path: ".claude/skills/methodology-bootstrapping/templates/"
+    reason: "Contains Claude Code extraction instructions and .claude/skills scaffolding outside the entry SKILL.md."
+  - path: ".claude/skills/rapid-convergence/reference/"
+    reason: "Contains .claude session history examples outside the entry SKILL.md."
+  - path: ".claude/skills/retrospective-validation/reference/"
+    reason: "Contains .claude session history examples outside the entry SKILL.md."
+  - path: ".claude/skills/subagent-prompt-construction/"
+    reason: "The skill package contains extensive Claude Code subagent reference, examples, templates, and extraction summaries outside the entry SKILL.md."
+  - path: ".claude/skills/testing-strategy/examples/"
+    reason: "Contains meta-cc and .claude fixture examples outside the entry SKILL.md."

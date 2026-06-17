@@ -1,0 +1,35 @@
+{
+  "name": "baime",
+  "version": "1.0.0",
+  "description": "BAIME methodology engineering workflows and skills for Codex.",
+  "author": {
+    "name": "yaleh",
+    "url": "https://github.com/yaleh"
+  },
+  "homepage": "https://github.com/yaleh/baime",
+  "repository": "https://github.com/yaleh/baime",
+  "license": "MIT",
+  "keywords": [
+    "baime",
+    "methodology",
+    "codex",
+    "skills"
+  ],
+  "skills": "./.codex/skills/",
+  "interface": {
+    "displayName": "BAIME",
+    "shortDescription": "Methodology engineering workflows for Codex",
+    "longDescription": "BAIME provides systematic workflows and skills for planning, iterative methodology development, validation, and knowledge extraction.",
+    "developerName": "yaleh",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use $methodology-bootstrapping to design a reusable engineering method.",
+      "Use $api-design to design or improve an API.",
+      "Use $testing-strategy to improve project test coverage."
+    ]
+  }
+}

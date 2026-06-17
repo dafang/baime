@@ -1,49 +1,87 @@
 # baime
 
-**BAIME (Bootstrapped AI Methodology Engineering)** — A systematic methodology development framework for Claude Code.
+**BAIME (Bootstrapped AI Methodology Engineering)** — A systematic methodology development framework for AI coding assistants, with shared Claude and Codex entrypoints.
 
-baime provides 22 validated skills and 4 specialized agents that help teams develop, validate, and scale AI-assisted software engineering methodologies using the Observe-Codify-Automate (OCA) cycle.
+baime provides 19 validated skills and 6 specialized workflow agents that help teams develop, validate, and scale AI-assisted software engineering methodologies using the Observe-Codify-Automate (OCA) cycle.
 
 ---
 
-## Installation
+## Install
 
-### Via Claude Code (recommended)
+Claude Code:
 
 ```bash
 /plugin marketplace add yaleh/baime
-/plugin install baime@baime
 ```
 
-### Via install script
+Codex:
+
+Clone this repository, then use it as a local Codex plugin or add a Codex marketplace entry that points at this plugin folder. The Codex plugin manifest is `.codex-plugin/plugin.json`; it exposes shared methodology skills through `.codex/skills/`.
 
 ```bash
-git clone https://github.com/yaleh/baime
-cd baime && ./scripts/install/install.sh
+git clone https://github.com/yaleh/baime.git
+cd baime
+
+# Option A: add a local marketplace root that points at this plugin.
+codex plugin marketplace add /path/to/local-marketplace-root
+
+# Option B: use a repo or personal marketplace entry whose source.path points at this baime folder.
 ```
 
-Restart Claude Code after installation.
+Install Codex custom agents separately with the companion installer:
+
+```bash
+bash scripts/install-codex-agents.sh --scope user --dry-run
+bash scripts/install-codex-agents.sh --scope user
+```
+
+For project-scoped agents:
+
+```bash
+bash scripts/install-codex-agents.sh --scope project --target /path/to/project
+```
+
+The installer generates self-contained Codex agent TOML files from the shared `.claude/agents/` source, so installed agents do not depend on paths inside this repository. Re-run with `--force` to overwrite existing BAIME agent files.
+
+---
+
+## Platform Model
+
+baime keeps one shared source and exposes host-specific entrypoints around it:
+
+```text
+.claude/agents/*.md          shared workflow agent source
+.claude/skills/*/SKILL.md    shared methodology skill source
+.codex/skills/*              symlinks to ../../.claude/skills/*
+.codex/agents/*.toml         repo-local Codex custom agent adapters
+.codex-plugin/plugin.json    Codex plugin manifest for shared skills
+scripts/install-codex-agents.sh
+                              installer for portable Codex custom agents
+```
+
+Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a compatibility layer, not copied content. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML.
 
 ---
 
 ## What's Included
 
-### 4 Agents
+### 6 Agents
 
 | Agent | Purpose |
 |-------|---------|
+| `stage-executor` | Execute project plan stages with formal validation and environment isolation |
+| `project-planner` | Create structured project plans with phases, stages, and acceptance criteria |
 | `iteration-executor` | Run iterative improvement cycles with convergence tracking |
 | `iteration-prompt-designer` | Design and refine prompts for iterative AI workflows |
 | `knowledge-extractor` | Extract and codify knowledge from project artifacts and session history |
-| `workflow-coach` | Coach users to optimize their Claude Code workflow (works standalone; optionally enriched by meta-cc) |
+| `workflow-coach` | Coach users to optimize their AI coding assistant workflow (works standalone; optionally enriched by meta-cc) |
 
-### 22 Skills
+### 19 Skills
 
 | Skill | Purpose |
 |-------|---------|
 | `agent-prompt-evolution` | Evolve agent prompts through empirical validation |
 | `api-design` | Design APIs using systematic methodology |
-| `backlog-setup` | Initialize a Backlog.md project with all columns required by the backlog+loop workflow (step 1) |
 | `baseline-quality-assessment` | Establish quality baselines for projects |
 | `build-quality-gates` | Define and enforce build quality checkpoints |
 | `ci-cd-optimization` | Optimize CI/CD pipelines using BAIME |
@@ -51,109 +89,77 @@ Restart Claude Code after installation.
 | `cross-cutting-concerns` | Implement cross-cutting concerns consistently |
 | `dependency-health` | Monitor and improve dependency health |
 | `documentation-management` | Maintain living documentation systematically |
-| `feature-developer` | Execute the full feature development lifecycle from proposal to implementation |
-| `feature-to-backlog` | Convert a feature description into a backlog task with TDD implementation plan (step 2 of backlog+loop workflow) |
+| `error-recovery` | Build robust error recovery patterns |
 | `knowledge-transfer` | Transfer knowledge between sessions and team members |
-| `loop-backlog` | Autonomous L0 worker that executes Ready tasks from the Backlog.md queue in isolated worktrees (step 3 of backlog+loop workflow) |
 | `methodology-bootstrapping` | Bootstrap new methodologies using the BAIME framework (includes Prompt Refinement methodology) |
 | `next-step-generation` | Generate ready-to-use next-step prompts from conversation context |
 | `observability-instrumentation` | Add observability to systems systematically |
 | `rapid-convergence` | Accelerate methodology convergence |
+| `retrospective-validation` | Validate outcomes with structured retrospectives |
 | `subagent-prompt-construction` | Construct effective prompts for Claude Code subagents |
-| `task-to-backlog` | Convert a non-development task into a backlog task with a phase-based execution plan (step 2 of backlog+loop workflow) |
 | `technical-debt-management` | Manage and reduce technical debt systematically |
 | `testing-strategy` | Develop comprehensive testing strategies |
 
 ---
 
+## Platform Notes
+
+- `allowed-tools` in shared skill frontmatter is Claude-specific optional metadata. It is kept for Claude compatibility and is not required by the Codex compatibility layer.
+- `workflow-coach` works standalone. meta-cc can enrich it with Claude Code session history, but meta-cc is optional and not a cross-platform requirement.
+- `subagent-prompt-construction` is a Claude-specific specialty skill for Claude Code subagent prompts. For platform-neutral workflow prompt design, use BAIME prompt refinement or methodology bootstrapping patterns first, then adapt the result to the host agent format.
+- Structural validation proves the repository layout, manifests, frontmatter, symlinks, repo-local custom agent adapters, and portable Codex agent installer output. Runtime smoke for Codex agent and skill triggering is handled by `scripts/smoke-codex-compat.sh`.
+
+---
+
 ## Quick Start
 
-### Use an Agent
+### Use a Workflow Agent
 
-In Claude Code, mention the agent in your prompt:
+Claude example:
 
 ```
 @agent-stage-executor Execute Stage 2 of the plan at @docs/plans/current-plan.md
 ```
 
+Codex example:
+
+```
+Use the stage-executor custom agent to execute Stage 2 of the plan at docs/plans/current-plan.md.
+```
+
 ### Use a Skill
 
-Skills are automatically available to Claude. Reference the skill context in your prompt:
+Skills are available through the host skill mechanism. Reference the skill by name in your prompt.
+
+Claude or host-neutral prompt:
 
 ```
 Apply the methodology-bootstrapping skill to develop a testing strategy for this project.
 ```
+
+Codex explicit invocation:
+
+```
+Use $methodology-bootstrapping to develop a testing strategy for this project.
+```
+
+In Codex CLI or IDE sessions, you can also use `/skills` or type `$` to select an installed BAIME skill. Claude and Codex both read the shared skill source from `.claude/skills/`; Codex reaches it through `.codex/skills/` symlinks.
 
 ### Workflow Coaching
 
 Start a coaching session:
 
 ```
-@agent-workflow-coach Let's review my Claude Code workflow and find areas to improve.
+Use the workflow-coach agent to review my AI coding assistant workflow and find areas to improve.
 ```
 
 The workflow coach works without any other tools installed. If you also have [meta-cc](https://github.com/yaleh/meta-cc) installed, the coach can optionally enrich its analysis with your actual session history.
 
 ---
 
-## Backlog + Loop Workflow
-
-Use the backlog-integrated skills to set up an autonomous task execution pipeline.
-
-### 1. Initialize
-
-Run once per project to set up the Backlog.md task queue with all required columns:
-
-```
-/backlog-setup
-```
-
-### 2. Create Tasks
-
-Convert feature requests or general tasks into structured backlog items with phase-based execution plans and automated DoD verification:
-
-```
-/feature-to-backlog Add OAuth2 login support
-/task-to-backlog Update the project README with workflow documentation
-```
-
-Move tasks to `Ready` when they are ready for execution:
-
-```bash
-backlog task edit TASK-1 --status "Ready"
-```
-
-### 3. Run the Autonomous Worker
-
-Invoke once to start the self-rescheduling worker loop:
-
-```
-/loop-backlog
-```
-
-The worker claims `Ready` tasks, executes them in isolated git worktrees, verifies DoD shell commands (with auto-retry), commits and merges changes back to `main`, marks tasks `Done`, and reschedules itself every 120 seconds.
-
-### 4. Monitor Progress
-
-```bash
-backlog task list --plain
-backlog task view TASK-1 --plain
-```
-
-Or launch the web UI:
-
-```bash
-backlog browser --port 6422 --no-open
-# open http://localhost:6422/
-```
-
-Tasks flow through: `Ready` → `In Progress` → `Done` (or `Needs Human` if the worker gets stuck and needs manual intervention).
-
----
-
 ## Related Projects
 
-**[meta-cc](https://github.com/yaleh/meta-cc)** — MCP server for Claude Code session history analysis. Provides query tools, token usage tracking, error analysis, and timeline visualization.
+**[meta-cc](https://github.com/yaleh/meta-cc)** — MCP server for Claude Code session history analysis. Provides query tools, token usage tracking, error analysis, and timeline visualization. In baime, meta-cc is an optional Claude-specific enrichment, not a cross-platform requirement.
 
 baime and meta-cc are complementary:
 - **baime**: methodology skills and agents (this repo)
@@ -163,24 +169,45 @@ baime and meta-cc are complementary:
 
 ## Validation
 
-Run the plugin validation script locally:
+Run the structural validation script locally:
 
 ```bash
 pip install pyyaml
 bash scripts/validate-plugin.sh
 ```
 
-Expected output: 6 agents, 19 skills, all YAML frontmatter checks passed.
+Expected output includes:
+
+```text
+Claude Agents: 6, Claude Skills: 19
+Codex Custom Agents: 6, Codex Skills: 19
+ALL CHECKS PASSED
+```
+
+This validates the dual-platform repository structure and the portable Codex agent installer output. It does not claim runtime smoke for Codex agent or skill triggering.
+
+Run the Codex compatibility smoke separately when you need runtime evidence:
+
+```bash
+bash scripts/smoke-codex-compat.sh --preflight
+bash scripts/smoke-codex-compat.sh --live
+```
+
+`--preflight` performs deterministic checks only, uses a temporary Codex home for marketplace validation, and verifies the Codex agent installer with a temporary project. `--live` runs `codex exec` against the local repository in read-only mode and depends on your local Codex auth, model access, and network. Smoke reports are written to `compatibility/smoke/latest/`.
 
 ---
 
 ## Contributing
 
 1. Fork the repository
-2. Add or modify content in `.claude/agents/` or `.claude/skills/`
-3. Ensure all YAML frontmatter includes `name` and `description` fields
-4. Run `bash scripts/validate-plugin.sh` — must pass
-5. Open a pull request
+2. Add or modify shared source content in `.claude/agents/` or `.claude/skills/`
+3. For skills, keep YAML frontmatter `name` equal to the skill directory slug and keep `description` present
+4. Do not copy skill content into `.codex/skills/`; those entries must remain symlinks to `../../.claude/skills/{slug}`
+5. Keep `.codex/agents/{agent}.toml` as repo-local custom agent adapters that reference the matching `.claude/agents/{agent}.md`
+6. Keep installed Codex agent files generated by `scripts/install-codex-agents.sh`; do not hand-copy repo-local adapter TOML into user or project agent directories
+7. Do not add workflow agents to `.codex/skills/`; agents stay in `.claude/agents/` with repo-local Codex adapters in `.codex/agents/` and portable installed TOML generated by the installer
+8. Run `bash scripts/validate-plugin.sh` — must pass
+9. Open a pull request
 
 ---
 
