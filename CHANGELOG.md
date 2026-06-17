@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-17
+
 ### Changed
 - `loop-backlog`: worker is now event-driven — uses a persistent daemon (`scripts/loop-backlog-daemon.js`) watching `backlog/tasks/` and Monitor instead of polling every 120 s via ScheduleWakeup; triggers instantly when a task becomes Ready
 - `loop-backlog`: Monitor runs in persistent mode (no 10-minute re-arm cycle); stops only when `backlog/.loop-stop` sentinel is written or `TaskStop` is called
