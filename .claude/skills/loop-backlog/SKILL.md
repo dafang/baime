@@ -141,138 +141,116 @@ fi
 
 ### ensureDaemonScript
 
-Write the daemon script to `scripts/loop-backlog-daemon.py` if it does not already exist.
-This section embeds the canonical daemon source so the skill is self-contained.
+Write the daemon script to `scripts/loop-backlog-daemon.js` if it does not already exist.
+Node.js is guaranteed available on every Claude Code install; no runtime dependency needed.
 
 ```bash
-DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.py"
+DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.js"
 
 if [ ! -f "$DAEMON_SCRIPT" ]; then
   mkdir -p "${REPO_ROOT}/scripts"
   cat > "$DAEMON_SCRIPT" << 'DAEMON_EOF'
-#!/usr/bin/env python3
-"""
-loop-backlog-daemon: polls backlog tasks dir and emits task-ready events to stdout.
+#!/usr/bin/env node
+/**
+ * loop-backlog-daemon.js — polls backlog tasks dir and emits task-ready events to stdout.
+ *
+ * Emits one line per Ready transition: "task-ready:TASK-N"
+ * Stops when parent process dies or stop-sentinel file appears.
+ *
+ * Pure Node.js stdlib — no npm dependencies required.
+ */
 
-Emits one line per Ready transition: "task-ready:TASK-N"
-Stops when parent process dies or stop-sentinel file appears.
-"""
+import fs from 'fs';
+import path from 'path';
+import process from 'process';
 
-import argparse
-import atexit
-import os
-import sys
-import time
+function parseArgs(argv) {
+  const args = {
+    tasksDir: '.backlog/tasks',
+    pidFile: '.backlog/.daemon.pid',
+    stopFile: '.backlog/.loop-stop',
+    interval: 0.5,
+  };
+  for (let i = 2; i < argv.length; i++) {
+    switch (argv[i]) {
+      case '--tasks-dir':  args.tasksDir  = argv[++i]; break;
+      case '--pid-file':   args.pidFile   = argv[++i]; break;
+      case '--stop-file':  args.stopFile  = argv[++i]; break;
+      case '--interval':   args.interval  = parseFloat(argv[++i]); break;
+      case '--help': case '-h':
+        process.stdout.write(
+          'Usage: loop-backlog-daemon.js [options]\n' +
+          '  --tasks-dir <path>  Directory of task markdown files (default: .backlog/tasks)\n' +
+          '  --pid-file  <path>  PID file path (default: .backlog/.daemon.pid)\n' +
+          '  --stop-file <path>  Stop sentinel path (default: .backlog/.loop-stop)\n' +
+          '  --interval  <secs> Poll interval in seconds (default: 0.5)\n'
+        );
+        process.exit(0);
+    }
+  }
+  return args;
+}
 
+function parseTaskId(filename) {
+  const base = path.basename(filename, path.extname(filename)).toUpperCase();
+  for (const part of base.split(/\s+/)) {
+    if (/^TASK-\d+$/.test(part)) return part;
+  }
+  const m = base.match(/\bTASK-(\d+)\b/);
+  return m ? `TASK-${m[1]}` : null;
+}
 
-def parse_task_id(filename):
-    base = os.path.splitext(os.path.basename(filename))[0]
-    upper = base.upper()
-    for part in upper.split():
-        if part.startswith("TASK-") and part[5:].isdigit():
-            return "TASK-" + part[5:]
-    return None
+function isReady(filepath) {
+  try {
+    const content = fs.readFileSync(filepath, 'utf8');
+    for (const line of content.split('\n')) {
+      const s = line.trim().toLowerCase();
+      if (s === 'status: ready' || s.startsWith('status: ready')) return true;
+    }
+  } catch { /* unreadable */ }
+  return false;
+}
 
+function scanReadyIds(tasksDir) {
+  const ready = new Set();
+  let entries;
+  try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    const id = parseTaskId(entry);
+    if (id && isReady(path.join(tasksDir, entry))) ready.add(id);
+  }
+  return ready;
+}
 
-def is_ready(filepath):
-    try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                stripped = line.strip().lower()
-                if stripped == "status: ready" or stripped.startswith("status: ready"):
-                    return True
-    except OSError:
-        pass
-    return False
+function isParentAlive(ppid) {
+  try { process.kill(ppid, 0); return true; } catch { return false; }
+}
 
+const args = parseArgs(process.argv);
+const intervalMs = Math.round(args.interval * 1000);
+const ppid = process.ppid;
 
-def scan_ready_ids(tasks_dir):
-    ready = set()
-    try:
-        entries = os.listdir(tasks_dir)
-    except OSError:
-        return ready
-    for entry in entries:
-        if not entry.endswith(".md"):
-            continue
-        task_id = parse_task_id(entry)
-        if task_id is None:
-            continue
-        fpath = os.path.join(tasks_dir, entry)
-        if is_ready(fpath):
-            ready.add(task_id)
-    return ready
+const pidDir = path.dirname(args.pidFile);
+if (pidDir) fs.mkdirSync(pidDir, { recursive: true });
+fs.writeFileSync(args.pidFile, String(process.pid));
 
+function removePid() { try { fs.unlinkSync(args.pidFile); } catch { /* gone */ } }
+process.on('exit', removePid);
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT',  () => process.exit(0));
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Poll backlog tasks directory and emit task-ready events."
-    )
-    parser.add_argument(
-        "--tasks-dir",
-        default=".backlog/tasks",
-        help="Directory containing task markdown files (default: .backlog/tasks)",
-    )
-    parser.add_argument(
-        "--pid-file",
-        default=".backlog/.daemon.pid",
-        help="Path to write the daemon PID (default: .backlog/.daemon.pid)",
-    )
-    parser.add_argument(
-        "--stop-file",
-        default=".backlog/.loop-stop",
-        help="Sentinel file whose presence causes daemon to exit (default: .backlog/.loop-stop)",
-    )
-    parser.add_argument(
-        "--interval",
-        type=float,
-        default=0.5,
-        help="Poll interval in seconds (default: 0.5)",
-    )
-    args = parser.parse_args()
-
-    pid_file = args.pid_file
-    pid_dir = os.path.dirname(pid_file)
-    if pid_dir:
-        os.makedirs(pid_dir, exist_ok=True)
-    with open(pid_file, "w") as f:
-        f.write(str(os.getpid()))
-
-    def remove_pid():
-        try:
-            os.remove(pid_file)
-        except OSError:
-            pass
-
-    atexit.register(remove_pid)
-
-    parent_pid = os.getppid()
-    notified = set()
-
-    while True:
-        if os.path.exists(args.stop_file):
-            break
-
-        try:
-            os.kill(parent_pid, 0)
-        except OSError:
-            break
-
-        ready_ids = scan_ready_ids(args.tasks_dir)
-
-        no_longer_ready = notified - ready_ids
-        notified -= no_longer_ready
-
-        for task_id in sorted(ready_ids - notified):
-            sys.stdout.write("task-ready:{}\n".format(task_id))
-            sys.stdout.flush()
-            notified.add(task_id)
-
-        time.sleep(args.interval)
-
-
-if __name__ == "__main__":
-    main()
+const notified = new Set();
+const timer = setInterval(() => {
+  if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
+  if (!isParentAlive(ppid))         { clearInterval(timer); process.exit(0); }
+  const readyIds = scanReadyIds(args.tasksDir);
+  for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
+  for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
+    process.stdout.write(`task-ready:${id}\n`);
+    notified.add(id);
+  }
+}, intervalMs);
 DAEMON_EOF
   echo "ensureDaemonScript: wrote $DAEMON_SCRIPT"
 fi
@@ -280,7 +258,7 @@ fi
 
 ### daemonBootstrap
 
-Start the task-watcher daemon if not already running. The daemon polls `.backlog/tasks/`
+Start the task-watcher daemon if not already running. The daemon polls `backlog/tasks/`
 and writes `task-ready:TASK-N` lines to stdout, which Monitor picks up as events.
 
 ```bash
@@ -303,7 +281,7 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 if [ "$DAEMON_RUNNING" = "false" ]; then
-  python3 "${REPO_ROOT}/scripts/loop-backlog-daemon.py" \
+  node "${REPO_ROOT}/scripts/loop-backlog-daemon.js" \
     --tasks-dir "$TASKS_DIR" \
     --pid-file  "$PID_FILE"  \
     --stop-file "$STOP_FILE" \
