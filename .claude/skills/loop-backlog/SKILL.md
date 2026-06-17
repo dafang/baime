@@ -44,13 +44,13 @@ workerLoop() = {
     return: Stopped,
 
   if (empty(task)):
-    -- No task yet; block until daemon emits a task-ready line (or timeout)
-    event: Monitor(timeout=600),
+    -- No task yet; block persistently until daemon emits a task-ready line
+    -- Monitor(persistent=true) never times out — daemon runs until .loop-stop written
+    event: Monitor(persistent=true),
     if (event matches "task-ready:TASK-*"):
       return: workerLoop(),      -- re-enter to claim the announced task
-    if (timeout ∨ stopSentinel()):
+    if (stopSentinel()):
       return: Stopped,
-    return: Idle,
 
   result: withWorktree(task, cfg, execute),
   return: result
@@ -343,7 +343,7 @@ backlog task list --status "In Progress" --plain \
 TASK_ID=$(backlog task list --status "Ready" --plain | grep -oP 'TASK-\d+' | head -1)
 ```
 
-If empty and no stop sentinel: use Monitor to wait for the next `task-ready` event.
+If empty and no stop sentinel: use Monitor (persistent) to wait for the next `task-ready` event.
 
 ```bash
 backlog task edit "$TASK_ID" --status "In Progress" \
@@ -548,6 +548,8 @@ The `daemonBootstrap` section will restart the daemon automatically on the next
 `/loop-backlog` invocation. The PID file (`.backlog/.daemon.pid`) is managed
 by the daemon itself and removed on exit.
 
-Use `Monitor(timeout=600)` to wait for the next event. On timeout (10 minutes with no
-activity), verify daemon liveness: if the PID file is gone, re-run `daemonBootstrap`,
-then re-enter `Monitor`. If the stop sentinel is present, exit.
+Use `Monitor(persistent=true)` to wait for task-ready events. The Monitor runs for the
+lifetime of the session — no re-arming on timeout needed. The daemon subprocess exits
+only when `.backlog/.loop-stop` is written (or the parent process dies).
+
+To stop the Monitor from outside the skill, call `TaskStop <monitor-task-id>`.
