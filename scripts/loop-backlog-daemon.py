@@ -4,6 +4,9 @@ loop-backlog-daemon: polls backlog tasks dir and emits task-ready events to stdo
 
 Emits one line per Ready transition: "task-ready:TASK-N"
 Stops when parent process dies or stop-sentinel file appears.
+
+LEGACY FALLBACK: The canonical version is scripts/loop-backlog-daemon.js (Node.js).
+Use this script only if Node.js is unavailable.
 """
 
 import argparse
