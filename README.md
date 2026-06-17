@@ -16,7 +16,7 @@ Claude Code:
 
 Codex:
 
-Clone this repository, then use it as a local Codex plugin or add a Codex marketplace entry that points at this plugin folder. The Codex plugin manifest is `.codex-plugin/plugin.json`; it exposes shared methodology skills from `.claude/skills/`.
+Clone this repository, then use it as a local Codex plugin or add a Codex marketplace entry that points at this plugin folder. The Codex plugin manifest is `.codex-plugin/plugin.json`; it exposes the shared methodology skills from `.claude/skills/`.
 
 ```bash
 git clone https://github.com/yaleh/baime.git
@@ -28,7 +28,7 @@ codex plugin marketplace add /path/to/local-marketplace-root
 # Option B: use a repo or personal marketplace entry whose source.path points at this baime folder.
 ```
 
-Install Codex custom agents separately with the companion installer:
+Install Codex custom agents and their `$...-agent` launcher skills with the companion installer:
 
 ```bash
 bash scripts/install-codex-agents.sh --scope user --dry-run
@@ -41,7 +41,7 @@ For project-scoped agents:
 bash scripts/install-codex-agents.sh --scope project --target /path/to/project
 ```
 
-The installer generates self-contained Codex agent TOML files from the shared `.claude/agents/` source, so installed agents do not depend on paths inside this repository. Re-run with `--force` to overwrite existing BAIME agent files.
+The installer generates self-contained Codex agent TOML files from the shared `.claude/agents/` source, so installed agents do not depend on paths inside this repository. It also creates six launcher skills such as `$workflow-coach-agent` and `$stage-executor-agent` in the same Codex scope, so users can select agent workflows from Codex's `$` / `/skills` picker. Re-run with `--force` to overwrite existing BAIME agent files and launcher skills.
 
 ---
 
@@ -56,10 +56,10 @@ baime keeps one shared source and exposes host-specific entrypoints around it:
 .codex/agents/*.toml         repo-local Codex custom agent adapters
 .codex-plugin/plugin.json    Codex plugin manifest pointing at shared skills
 scripts/install-codex-agents.sh
-                              installer for portable Codex custom agents
+                              installer for portable Codex custom agents and launcher skills
 ```
 
-Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a repo-local compatibility layer for direct repository checks, not copied content. The installed Codex plugin reads skills from `.claude/skills/` so plugin cache installs contain real skill files rather than symlinks. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML.
+Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/skills/` is a repo-local compatibility layer for direct repository checks, not copied content. `.codex/agents/` contains thin repo-local Codex custom agent adapters that point back to the matching shared workflow agent source when you run Codex inside this repository. User or project installations should use `scripts/install-codex-agents.sh`, which embeds the shared workflow source into portable installed TOML and creates Codex-only `$...-agent` launcher skills in the target Codex skills directory.
 
 ---
 
@@ -75,6 +75,8 @@ Treat `.claude/agents/` and `.claude/skills/` as the source of truth. `.codex/sk
 | `iteration-prompt-designer` | Design and refine prompts for iterative AI workflows |
 | `knowledge-extractor` | Extract and codify knowledge from project artifacts and session history |
 | `workflow-coach` | Coach users to optimize their AI coding assistant workflow (works standalone; optionally enriched by meta-cc) |
+
+The Codex agent installer also creates six launcher skills named `{agent}-agent`, such as `$workflow-coach-agent` and `$stage-executor-agent`. These are selection shortcuts that delegate to the matching installed Codex custom agent.
 
 ### 19 Skills
 
@@ -143,7 +145,7 @@ Codex explicit invocation:
 Use $methodology-bootstrapping to develop a testing strategy for this project.
 ```
 
-In Codex CLI or IDE sessions, you can also use `/skills` or type `$` to select an installed BAIME skill. Claude and installed Codex plugins both read the shared skill source from `.claude/skills/`; `.codex/skills/` remains a repo-local symlink layer for compatibility checks.
+In Codex CLI or IDE sessions, you can also use `/skills` or type `$` to select an installed BAIME skill. To run an agent from the skill picker, first run `scripts/install-codex-agents.sh`, then choose one of the installed launcher skills, for example `$workflow-coach-agent` or `$stage-executor-agent`. Claude and Codex plugin installs both read the shared skill source from `.claude/skills/`; `.codex/skills/` remains a repo-local symlink layer for compatibility checks.
 
 ### Workflow Coaching
 
@@ -204,8 +206,8 @@ bash scripts/smoke-codex-compat.sh --live
 3. For skills, keep YAML frontmatter `name` equal to the skill directory slug and keep `description` present
 4. Do not copy skill content into `.codex/skills/`; those entries must remain symlinks to `../../.claude/skills/{slug}`
 5. Keep `.codex/agents/{agent}.toml` as repo-local custom agent adapters that reference the matching `.claude/agents/{agent}.md`
-6. Keep installed Codex agent files generated by `scripts/install-codex-agents.sh`; do not hand-copy repo-local adapter TOML into user or project agent directories
-7. Do not add workflow agents to `.codex/skills/`; agents stay in `.claude/agents/` with repo-local Codex adapters in `.codex/agents/` and portable installed TOML generated by the installer
+6. Keep installed Codex agent and launcher skill files generated by `scripts/install-codex-agents.sh`; do not hand-copy repo-local adapter TOML into user or project Codex directories
+7. Do not add workflow agents to `.codex/skills/`; Codex `$...-agent` entries are installed dynamically by the agent installer
 8. Run `bash scripts/validate-plugin.sh` — must pass
 9. Open a pull request
 

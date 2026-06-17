@@ -20,11 +20,11 @@ usage() {
 Usage: bash scripts/install-codex-agents.sh --scope user|project [options]
 
 Options:
-  --scope user        Install to ${CODEX_HOME:-$HOME/.codex}/agents.
-  --scope project     Install to <target>/.codex/agents.
+  --scope user        Install agents to ${CODEX_HOME:-$HOME/.codex}/agents and launcher skills to ${CODEX_HOME:-$HOME/.codex}/skills.
+  --scope project     Install agents to <target>/.codex/agents and launcher skills to <target>/.codex/skills.
   --target DIR        Project directory for --scope project.
-  --dry-run           Generate and validate agents without writing files.
-  --force             Overwrite existing BAIME agent TOML files.
+  --dry-run           Generate and validate agents and launcher skills without writing files.
+  --force             Overwrite existing BAIME agent TOML files and launcher skill directories.
   --help, -h          Show this help.
 
 Examples:
@@ -93,10 +93,12 @@ case "$SCOPE" in
             fail "--target is only valid with --scope project"
         fi
         TARGET_AGENTS_DIR="${CODEX_HOME:-$HOME/.codex}/agents"
+        TARGET_SKILLS_DIR="${CODEX_HOME:-$HOME/.codex}/skills"
         ;;
     project)
         [ -n "$TARGET" ] || fail "--target is required with --scope project"
         TARGET_AGENTS_DIR="$TARGET/.codex/agents"
+        TARGET_SKILLS_DIR="$TARGET/.codex/skills"
         ;;
     "")
         fail "--scope user|project is required"
@@ -117,16 +119,20 @@ fi
 TMP_DIR="$(mktemp -d)"
 [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ] || fail "mktemp -d failed"
 GENERATED_DIR="$TMP_DIR/agents"
-GENERATED_LIST="$TMP_DIR/generated-files.txt"
+GENERATED_SKILLS_DIR="$TMP_DIR/skills"
+GENERATED_AGENT_LIST="$TMP_DIR/generated-agents.txt"
+GENERATED_SKILL_LIST="$TMP_DIR/generated-skills.txt"
 mkdir -p "$GENERATED_DIR"
+mkdir -p "$GENERATED_SKILLS_DIR"
 
-"$TOML_PYTHON" - "$REPO_ROOT" "$GENERATED_DIR" <<'PY'
+"$TOML_PYTHON" - "$REPO_ROOT" "$GENERATED_DIR" "$GENERATED_SKILLS_DIR" <<'PY'
 import sys
 from pathlib import Path
 import tomllib
 
 repo_root = Path(sys.argv[1])
 generated_dir = Path(sys.argv[2])
+generated_skills_dir = Path(sys.argv[3])
 source_dir = repo_root / ".claude" / "agents"
 adapter_dir = repo_root / ".codex" / "agents"
 
@@ -170,6 +176,31 @@ def render(slug: str, data: dict, source_text: str) -> str:
         lines.append(f"model_reasoning_effort = {toml_string(str(model_reasoning_effort))}")
     return "\n".join(lines) + "\n"
 
+def render_launcher_skill(slug: str, description: str) -> str:
+    name = f"{slug}-agent"
+    return f"""---
+name: {name}
+description: Explicit Codex launcher for the BAIME {slug} custom agent. Use when the user selects this skill or asks to run the {slug} agent workflow.
+---
+
+# BAIME {slug} Agent Launcher
+
+Use this skill as a shortcut to run the BAIME `{slug}` custom agent.
+
+When invoked:
+
+1. Spawn or delegate to the `{slug}` custom agent.
+2. Pass through the user's request and any relevant files, paths, constraints, and acceptance criteria.
+3. Ask the custom agent to follow its installed `developer_instructions`.
+4. Wait for the custom agent result, then summarize the result back to the user.
+
+Agent purpose:
+
+{description}
+
+Do not perform the full workflow in this launcher skill unless Codex cannot spawn the custom agent. If delegation is unavailable, explain that the `{slug}` custom agent is required and ask the user to install it with `scripts/install-codex-agents.sh`.
+"""
+
 for source_file in source_files:
     slug = source_file.stem
     adapter_file = adapter_dir / f"{slug}.toml"
@@ -196,6 +227,11 @@ for source_file in source_files:
     rendered = render(slug, data, source_text)
     generated_file.write_text(rendered)
 
+    skill_dir = generated_skills_dir / f"{slug}-agent"
+    (skill_dir / "agents").mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(render_launcher_skill(slug, data["description"]))
+    (skill_dir / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: false\n")
+
     try:
         generated_data = tomllib.loads(rendered)
     except Exception as exc:
@@ -221,19 +257,26 @@ for source_file in source_files:
         print(f"generated TOML for {slug} does not embed source content", file=sys.stderr)
         sys.exit(1)
 
-print(f"generated {len(source_files)} portable Codex custom agent TOML files")
+print(f"generated {len(source_files)} portable Codex custom agent TOML files and launcher skills")
 PY
 
-find "$GENERATED_DIR" -maxdepth 1 -type f -name '*.toml' | sort > "$GENERATED_LIST"
+find "$GENERATED_DIR" -maxdepth 1 -type f -name '*.toml' | sort > "$GENERATED_AGENT_LIST"
+find "$GENERATED_SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort > "$GENERATED_SKILL_LIST"
 
-GENERATED_COUNT="$(wc -l < "$GENERATED_LIST" | tr -d ' ')"
-if [ "$GENERATED_COUNT" -ne 6 ]; then
-    fail "expected 6 generated agent TOML files, found $GENERATED_COUNT"
+GENERATED_AGENT_COUNT="$(wc -l < "$GENERATED_AGENT_LIST" | tr -d ' ')"
+if [ "$GENERATED_AGENT_COUNT" -ne 6 ]; then
+    fail "expected 6 generated agent TOML files, found $GENERATED_AGENT_COUNT"
+fi
+
+GENERATED_SKILL_COUNT="$(wc -l < "$GENERATED_SKILL_LIST" | tr -d ' ')"
+if [ "$GENERATED_SKILL_COUNT" -ne 6 ]; then
+    fail "expected 6 generated agent launcher skills, found $GENERATED_SKILL_COUNT"
 fi
 
 echo "BAIME Codex custom agent installer"
 echo "Scope: $SCOPE"
 echo "Target agents dir: $TARGET_AGENTS_DIR"
+echo "Target launcher skills dir: $TARGET_SKILLS_DIR"
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "Mode: dry-run"
 else
@@ -244,8 +287,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "Planned agents:"
     while IFS= read -r generated_file; do
         echo "  $(basename "$generated_file" .toml) -> $TARGET_AGENTS_DIR/$(basename "$generated_file")"
-    done < "$GENERATED_LIST"
-    echo "DRY RUN: 6 agents generated and validated; no files written."
+    done < "$GENERATED_AGENT_LIST"
+    echo "Planned launcher skills:"
+    while IFS= read -r generated_skill_dir; do
+        echo "  $(basename "$generated_skill_dir") -> $TARGET_SKILLS_DIR/$(basename "$generated_skill_dir")"
+    done < "$GENERATED_SKILL_LIST"
+    echo "DRY RUN: 6 agents and 6 launcher skills generated and validated; no files written."
     exit 0
 fi
 
@@ -257,40 +304,60 @@ while IFS= read -r generated_file; do
         echo "CONFLICT: $target_file exists; rerun with --force to overwrite" >&2
         CONFLICTS=$((CONFLICTS + 1))
     fi
-done < "$GENERATED_LIST"
+done < "$GENERATED_AGENT_LIST"
+while IFS= read -r generated_skill_dir; do
+    name="$(basename "$generated_skill_dir")"
+    target_dir="$TARGET_SKILLS_DIR/$name"
+    if { [ -e "$target_dir" ] || [ -L "$target_dir" ]; } && [ "$FORCE" -ne 1 ]; then
+        echo "CONFLICT: $target_dir exists; rerun with --force to overwrite" >&2
+        CONFLICTS=$((CONFLICTS + 1))
+    fi
+done < "$GENERATED_SKILL_LIST"
 
 if [ "$CONFLICTS" -gt 0 ]; then
-    fail "$CONFLICTS existing agent file(s) would be overwritten"
+    fail "$CONFLICTS existing Codex agent or launcher skill path(s) would be overwritten"
 fi
 
 mkdir -p "$TARGET_AGENTS_DIR"
+mkdir -p "$TARGET_SKILLS_DIR"
 OVERLAY_DIR="$TMP_DIR/overlay"
 rm -rf "$OVERLAY_DIR"
-mkdir -p "$OVERLAY_DIR"
+mkdir -p "$OVERLAY_DIR/agents" "$OVERLAY_DIR/skills"
 while IFS= read -r generated_file; do
-    cp "$generated_file" "$OVERLAY_DIR/$(basename "$generated_file")" || fail "failed to stage $(basename "$generated_file")"
-done < "$GENERATED_LIST"
+    cp "$generated_file" "$OVERLAY_DIR/agents/$(basename "$generated_file")" || fail "failed to stage $(basename "$generated_file")"
+done < "$GENERATED_AGENT_LIST"
+while IFS= read -r generated_skill_dir; do
+    cp -R "$generated_skill_dir" "$OVERLAY_DIR/skills/$(basename "$generated_skill_dir")" || fail "failed to stage $(basename "$generated_skill_dir")"
+done < "$GENERATED_SKILL_LIST"
 
 while IFS= read -r generated_file; do
-    staged_file="$OVERLAY_DIR/$(basename "$generated_file")"
+    staged_file="$OVERLAY_DIR/agents/$(basename "$generated_file")"
     cp "$staged_file" "$TARGET_AGENTS_DIR/$(basename "$generated_file")" || fail "failed to write $TARGET_AGENTS_DIR/$(basename "$generated_file")"
-done < "$GENERATED_LIST"
+done < "$GENERATED_AGENT_LIST"
+while IFS= read -r generated_skill_dir; do
+    name="$(basename "$generated_skill_dir")"
+    rm -rf "$TARGET_SKILLS_DIR/$name"
+    cp -R "$OVERLAY_DIR/skills/$name" "$TARGET_SKILLS_DIR/$name" || fail "failed to write $TARGET_SKILLS_DIR/$name"
+done < "$GENERATED_SKILL_LIST"
 
-"$TOML_PYTHON" - "$TARGET_AGENTS_DIR" <<'PY'
+"$TOML_PYTHON" - "$TARGET_AGENTS_DIR" "$TARGET_SKILLS_DIR" <<'PY'
 import sys
+import re
 from pathlib import Path
 import tomllib
 
 target_dir = Path(sys.argv[1])
+skills_dir = Path(sys.argv[2])
 files = sorted(target_dir.glob("*.toml"))
-baime_files = [path for path in files if path.stem in {
+expected = {
     "iteration-executor",
     "iteration-prompt-designer",
     "knowledge-extractor",
     "project-planner",
     "stage-executor",
     "workflow-coach",
-}]
+}
+baime_files = [path for path in files if path.stem in expected]
 
 if len(baime_files) != 6:
     print(f"expected 6 installed BAIME agent TOML files, found {len(baime_files)}", file=sys.stderr)
@@ -313,10 +380,40 @@ for path in baime_files:
     if "--- BEGIN BAIME WORKFLOW SOURCE ---" not in instructions:
         print(f"{path} does not contain embedded BAIME workflow source", file=sys.stderr)
         sys.exit(1)
+
+for slug in expected:
+    skill_dir = skills_dir / f"{slug}-agent"
+    skill_file = skill_dir / "SKILL.md"
+    policy_file = skill_dir / "agents" / "openai.yaml"
+    if not skill_file.is_file():
+        print(f"missing launcher skill: {skill_file}", file=sys.stderr)
+        sys.exit(1)
+    content = skill_file.read_text()
+    match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+    if not match:
+        print(f"{skill_file} missing frontmatter", file=sys.stderr)
+        sys.exit(1)
+    frontmatter = match.group(1)
+    if f"name: {slug}-agent" not in frontmatter:
+        print(f"{skill_file} has wrong skill name", file=sys.stderr)
+        sys.exit(1)
+    if "description:" not in frontmatter:
+        print(f"{skill_file} missing description", file=sys.stderr)
+        sys.exit(1)
+    if f"`{slug}` custom agent" not in content:
+        print(f"{skill_file} does not point at {slug} custom agent", file=sys.stderr)
+        sys.exit(1)
+    if not policy_file.is_file() or "allow_implicit_invocation: false" not in policy_file.read_text():
+        print(f"{policy_file} must disable implicit invocation", file=sys.stderr)
+        sys.exit(1)
 PY
 
 echo "Installed agents:"
 while IFS= read -r generated_file; do
     echo "  $(basename "$generated_file" .toml) -> $TARGET_AGENTS_DIR/$(basename "$generated_file")"
-done < "$GENERATED_LIST"
-echo "DONE: 6 BAIME Codex custom agents installed."
+done < "$GENERATED_AGENT_LIST"
+echo "Installed launcher skills:"
+while IFS= read -r generated_skill_dir; do
+    echo "  $(basename "$generated_skill_dir") -> $TARGET_SKILLS_DIR/$(basename "$generated_skill_dir")"
+done < "$GENERATED_SKILL_LIST"
+echo "DONE: 6 BAIME Codex custom agents and 6 launcher skills installed."

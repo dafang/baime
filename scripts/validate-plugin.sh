@@ -426,16 +426,19 @@ INSTALLER="$REPO_ROOT/scripts/install-codex-agents.sh"
 TMP_INSTALL_PROJECT=""
 
 validate_installed_codex_agents() {
-    local target_dir="$1"
+    local target_agents_dir="$1"
+    local target_skills_dir="$2"
     if [ -z "$TOML_PYTHON" ]; then
         return 1
     fi
-    "$TOML_PYTHON" - "$target_dir" <<'EOF'
+    "$TOML_PYTHON" - "$target_agents_dir" "$target_skills_dir" <<'EOF'
 import sys
+import re
 from pathlib import Path
 import tomllib
 
 target_dir = Path(sys.argv[1])
+skills_dir = Path(sys.argv[2])
 expected = {
     "iteration-executor",
     "iteration-prompt-designer",
@@ -478,6 +481,29 @@ for path in files:
     if "--- BEGIN BAIME WORKFLOW SOURCE ---" not in instructions:
         print(f"  FAIL: {path} - embedded BAIME workflow source marker missing")
         sys.exit(1)
+
+for slug in expected:
+    skill_dir = skills_dir / f"{slug}-agent"
+    skill_file = skill_dir / "SKILL.md"
+    policy_file = skill_dir / "agents" / "openai.yaml"
+    if not skill_file.is_file():
+        print(f"  FAIL: launcher skill missing: {skill_file}")
+        sys.exit(1)
+    content = skill_file.read_text()
+    match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+    if not match:
+        print(f"  FAIL: {skill_file} - missing YAML frontmatter")
+        sys.exit(1)
+    frontmatter = match.group(1)
+    if f"name: {slug}-agent" not in frontmatter or "description:" not in frontmatter:
+        print(f"  FAIL: {skill_file} - invalid launcher frontmatter")
+        sys.exit(1)
+    if f"`{slug}` custom agent" not in content:
+        print(f"  FAIL: {skill_file} - does not point at {slug} custom agent")
+        sys.exit(1)
+    if not policy_file.is_file() or "allow_implicit_invocation: false" not in policy_file.read_text():
+        print(f"  FAIL: {policy_file} - must disable implicit invocation")
+        sys.exit(1)
 EOF
 }
 
@@ -489,22 +515,22 @@ fi
 
 if [ -x "$INSTALLER" ]; then
     if "$INSTALLER" --scope user --dry-run >/dev/null 2>&1; then
-        pass "Codex agent installer dry-run generates portable agents"
+        pass "Codex agent installer dry-run generates portable agents and launcher skills"
     else
         fail "Codex agent installer dry-run failed"
     fi
 
     TMP_INSTALL_PROJECT="$(mktemp -d)"
     if "$INSTALLER" --scope project --target "$TMP_INSTALL_PROJECT" >/dev/null 2>&1; then
-        pass "Codex agent installer writes project-scoped agents"
+        pass "Codex agent installer writes project-scoped agents and launcher skills"
     else
         fail "Codex agent installer project install failed"
     fi
 
-    if [ -d "$TMP_INSTALL_PROJECT/.codex/agents" ] && validate_installed_codex_agents "$TMP_INSTALL_PROJECT/.codex/agents"; then
-        pass "Installed Codex custom agents are self-contained and portable"
+    if [ -d "$TMP_INSTALL_PROJECT/.codex/agents" ] && [ -d "$TMP_INSTALL_PROJECT/.codex/skills" ] && validate_installed_codex_agents "$TMP_INSTALL_PROJECT/.codex/agents" "$TMP_INSTALL_PROJECT/.codex/skills"; then
+        pass "Installed Codex custom agents and launcher skills are valid"
     else
-        fail "Installed Codex custom agents are invalid or not portable"
+        fail "Installed Codex custom agents or launcher skills are invalid"
     fi
 fi
 
@@ -514,9 +540,9 @@ echo ""
 echo "=== Count Assertions ==="
 
 EXPECTED_AGENTS=6
-EXPECTED_SKILLS=19
-EXPECTED_CODEX_SKILLS=19
-EXPECTED_CODEX_CUSTOM_AGENTS=6
+EXPECTED_SKILLS="$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+EXPECTED_CODEX_SKILLS="$(find "$CODEX_SKILLS_DIR" -maxdepth 1 -type l | wc -l | tr -d ' ')"
+EXPECTED_CODEX_CUSTOM_AGENTS="$(find "$CODEX_AGENTS_DIR" -maxdepth 1 -type f -name '*.toml' | wc -l | tr -d ' ')"
 
 if [ "$AGENT_COUNT" -eq "$EXPECTED_AGENTS" ]; then
     pass "Agent count: $AGENT_COUNT (expected $EXPECTED_AGENTS)"
