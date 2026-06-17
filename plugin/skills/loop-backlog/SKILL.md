@@ -84,20 +84,33 @@ withWorktree(T, cfg, f) = {
 }
 
 -- execute is task-type-agnostic: T.description is the sole authority on what to do
+-- If re-claimed after a Needs Human cycle, human reply in Notes takes precedence.
 execute :: Task → Outcome
 execute(T) = {
-  _:      followDescription(T.description),
+  ctx:    readHumanReply(T),       -- extract human's answer if re-claimed after escalation
+  _:      followDescription(T.description, ctx),
   _:      ∀(n, cmd) ∈ enumerate(T.dodCommands): verifyDod(T, n, cmd),
   hash:   conditionalCommit(T),
   return: merge(T, hash)
 } | cannotProceed(reason) → escalate(T, reason)
 
+-- readHumanReply: scan Notes for a human reply written after the last "Escalated:" entry.
+-- Returns a context map that followDescription uses to resolve open questions.
+readHumanReply :: Task → Context
+readHumanReply(T) =
+  | hasEscalatedNote(T) →
+      reply: textAfterLastEscalated(T.notes),
+      if (nonEmpty(reply)): return parseContext(reply)   -- treat reply as free-form; extract decisions
+  | otherwise → emptyContext
+
 -- escalate: only exit when the worker cannot continue without human input.
 -- Never ask the user a question while a task is In Progress; call escalate() instead.
+-- Write a clear "Human, please answer:" question so the user can reply directly in Notes.
 escalate :: (Task, Reason) → Outcome
 escalate(T, r) = {
   setStatus(T, "Needs Human"),
-  appendNote(T, "Escalated: " + r),
+  appendNote(T, "Escalated: " + r
+               + "\nTo continue: answer in Implementation Notes, then set status → Ready."),
   return: NeedsHuman(r)
 }
 
@@ -354,10 +367,41 @@ done
 cd "$WORKTREE"
 ```
 
-### execute → followDescription
+### execute → readHumanReply
+
+Before reading the Description, check whether this task was previously escalated.
 
 ```bash
 TASK_VIEW=$(backlog task view "$TASK_ID" --plain)
+NOTES_SECTION=$(echo "$TASK_VIEW" | awk '/^Implementation Notes:/,0' | tail -n +2)
+LAST_ESCALATED_LINE=$(echo "$NOTES_SECTION" | grep -n "^Escalated:" | tail -1 | cut -d: -f1)
+```
+
+If `LAST_ESCALATED_LINE` is non-empty, extract everything after it as the human reply:
+
+```bash
+HUMAN_REPLY=""
+if [ -n "$LAST_ESCALATED_LINE" ]; then
+  HUMAN_REPLY=$(echo "$NOTES_SECTION" | tail -n +$((LAST_ESCALATED_LINE + 1)))
+fi
+```
+
+If `HUMAN_REPLY` is non-empty, read it carefully before proceeding. It is a free-form
+natural-language answer from the user. Extract any decisions, version numbers, file paths,
+or other context it provides. Use this information throughout execution — it supersedes
+any open questions left by the previous escalation. Log what you understood:
+
+```bash
+if [ -n "$HUMAN_REPLY" ]; then
+  backlog task edit "$TASK_ID" --append-notes \
+    "Human reply received — interpreted context:
+$(echo "$HUMAN_REPLY" | head -10)"
+fi
+```
+
+### execute → followDescription
+
+```bash
 TITLE=$(echo "$TASK_VIEW" | grep -oP '(?<=Task TASK-\d+ - ).+' | head -1)
 
 # Accumulator for final-summary
@@ -365,10 +409,11 @@ EXECUTION_LOG=""
 log_exec() { EXECUTION_LOG="${EXECUTION_LOG}$1\n"; }
 ```
 
-Read the task Description in full. The Description is the sole authority on what to
-do — it may call for code changes, documentation, experiments, or analysis. Follow its
-`## Phase` sections in order. After each phase completes, append a structured checkpoint
-that includes the key outputs or decisions from that phase:
+Read the task Description in full. The Description is the primary authority on what to
+do. If a human reply was extracted above, it takes precedence for any open questions
+(e.g. version numbers, file paths, decisions) — apply it before executing phases.
+Follow the Description's `## Phase` sections in order. After each phase completes,
+append a structured checkpoint that includes the key outputs or decisions from that phase:
 
 ```bash
 PHASE_NOTE="Phase <X> ✓ $(date -u +%Y-%m-%dT%H:%M:%SZ)
