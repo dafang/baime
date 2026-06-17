@@ -36,10 +36,8 @@ cd $(git rev-parse --show-toplevel) && bash scripts/release/release.sh v<VERSION
 - [ ] `bash $(git rev-parse --show-toplevel)/scripts/release/release.sh v<VERSION> --dry-run 2>&1 | grep -q 'DRY RUN COMPLETE'`
 
 ## Phase 3: Execute the release
-Run the release script for real. It will bump version fields in plugin/.claude-plugin/plugin.json
-and plugin/.claude-plugin/marketplace.json, verify the CHANGELOG entry, commit those changes,
-create the annotated tag v<VERSION>, push main to origin, and push the tag (which triggers
-GitHub Actions).
+Run the release script for real. It handles version bumping, changelog verification, tagging,
+and pushing — the tag push triggers GitHub Actions.
 
 ```bash
 cd $(git rev-parse --show-toplevel) && bash scripts/release/release.sh v<VERSION>
