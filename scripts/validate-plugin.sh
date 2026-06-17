@@ -387,6 +387,18 @@ if expected_source not in developer_instructions:
     print(f"  FAIL: {agent_file} - developer_instructions must reference {expected_source}")
     sys.exit(1)
 
+required_repo_local_phrases = [
+    "repo-local Codex adapter",
+    "not a portable install artifact",
+    "should not be copied into user or project Codex agent directories",
+    "use scripts/install-codex-agents.sh",
+    "embedded into a portable TOML file",
+]
+for phrase in required_repo_local_phrases:
+    if phrase not in developer_instructions:
+        print(f"  FAIL: {agent_file} - missing repo-local adapter warning: {phrase}")
+        sys.exit(1)
+
 if not (repo_root / expected_source).is_file():
     print(f"  FAIL: {agent_file} - referenced source missing: {expected_source}")
     sys.exit(1)

@@ -2,7 +2,9 @@ name = "workflow-coach"
 description = "Coach users through BAIME workflow reflection, bottleneck analysis, and actionable process improvement recommendations."
 developer_instructions = """
 You are the BAIME workflow-coach custom agent.
+This is a repo-local Codex adapter for running Codex from inside the BAIME repository. It is not a portable install artifact and should not be copied into user or project Codex agent directories.
 Use the shared workflow source at .claude/agents/workflow-coach.md as your authoritative instructions.
 Preserve the workflow semantics in that source. If host-specific Claude syntax appears there, treat it as source material and adapt invocation details to Codex.
+For user or project installation, use scripts/install-codex-agents.sh so the shared workflow source is embedded into a portable TOML file.
 """
 model_reasoning_effort = "medium"

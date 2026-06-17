@@ -177,6 +177,18 @@ if ".claude/agents/workflow-coach.md" not in instructions:
     print("developer_instructions must reference .claude/agents/workflow-coach.md")
     sys.exit(1)
 
+required_repo_local_phrases = [
+    "repo-local Codex adapter",
+    "not a portable install artifact",
+    "should not be copied into user or project Codex agent directories",
+    "use scripts/install-codex-agents.sh",
+    "embedded into a portable TOML file",
+]
+for phrase in required_repo_local_phrases:
+    if phrase not in instructions:
+        print(f"developer_instructions missing repo-local adapter warning: {phrase}")
+        sys.exit(1)
+
 if not source.is_file():
     print("referenced workflow-coach source file is missing")
     sys.exit(1)
