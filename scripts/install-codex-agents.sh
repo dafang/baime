@@ -240,6 +240,15 @@ else
     echo "Mode: install"
 fi
 
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "Planned agents:"
+    while IFS= read -r generated_file; do
+        echo "  $(basename "$generated_file" .toml) -> $TARGET_AGENTS_DIR/$(basename "$generated_file")"
+    done < "$GENERATED_LIST"
+    echo "DRY RUN: 6 agents generated and validated; no files written."
+    exit 0
+fi
+
 CONFLICTS=0
 while IFS= read -r generated_file; do
     name="$(basename "$generated_file")"
@@ -252,15 +261,6 @@ done < "$GENERATED_LIST"
 
 if [ "$CONFLICTS" -gt 0 ]; then
     fail "$CONFLICTS existing agent file(s) would be overwritten"
-fi
-
-if [ "$DRY_RUN" -eq 1 ]; then
-    echo "Planned agents:"
-    while IFS= read -r generated_file; do
-        echo "  $(basename "$generated_file" .toml) -> $TARGET_AGENTS_DIR/$(basename "$generated_file")"
-    done < "$GENERATED_LIST"
-    echo "DRY RUN: 6 agents generated and validated; no files written."
-    exit 0
 fi
 
 mkdir -p "$TARGET_AGENTS_DIR"

@@ -1,0 +1,9 @@
+{
+  "name": "baime",
+  "version": "1.0.0",
+  "description": "BAIME methodology engineering workflows with 19 skills and 6 specialized agents for Claude Code.",
+  "author": {
+    "name": "yaleh",
+    "url": "https://github.com/yaleh"
+  }
+}

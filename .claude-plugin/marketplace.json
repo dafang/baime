@@ -1,28 +1,22 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "baime",
-  "description": "BAIME (Bootstrapped AI Methodology Engineering) - systematic methodology development framework",
+  "description": "BAIME (Bootstrapped AI Methodology Engineering) - Systematic methodology development framework with 19 validated skills and 6 specialized agents for Claude Code",
   "owner": {
-    "name": "Yale Huang",
+    "name": "yaleh",
     "url": "https://github.com/yaleh"
   },
   "plugins": [
     {
       "name": "baime",
-      "source": "./plugin",
-      "version": "1.1.3",
-      "description": "22 validated skills and 4 specialized agents for systematic AI methodology engineering via OCA cycles and dual-layer value functions",
-      "license": "MIT",
-      "homepage": "https://github.com/yaleh/baime",
-      "category": "methodology",
-      "tags": [
-        "methodology",
-        "engineering",
-        "skills",
-        "agents",
-        "baime",
-        "oca"
-      ]
+      "description": "BAIME methodology engineering workflows with 19 skills and 6 specialized agents for Claude Code.",
+      "version": "1.0.0",
+      "author": {
+        "name": "yaleh",
+        "url": "https://github.com/yaleh"
+      },
+      "source": "./.claude",
+      "category": "productivity"
     }
   ]
 }

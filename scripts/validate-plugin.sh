@@ -111,8 +111,25 @@ if ! PLUGIN_VERSION="$(json_field "$PLUGIN_JSON" "version")"; then
     fail "plugin.json missing version"
 fi
 
-if ! MARKETPLACE_VERSION="$(json_field "$MARKETPLACE_JSON" "version")"; then
-    fail "marketplace.json missing version"
+if ! MARKETPLACE_VERSION="$(python3 - "$MARKETPLACE_JSON" <<'PY' 2>/dev/null
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+version = data.get("version")
+if not version:
+    plugins = data.get("plugins") or []
+    if plugins:
+        version = plugins[0].get("version")
+
+if not version:
+    sys.exit(1)
+print(version)
+PY
+)"; then
+    fail "marketplace.json missing plugin version"
 fi
 
 if ! CODEX_PLUGIN_VERSION="$(json_field "$CODEX_PLUGIN_JSON" "version")"; then
