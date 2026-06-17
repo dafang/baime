@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-17
+
+### Added
+- `loop-backlog`: human-reply continuation — when a task is escalated to Needs Human, the worker now reads free-form natural-language replies written in Implementation Notes after the last "Escalated:" entry; user unblocks a task by replying in Notes and resetting status to Ready, without editing the Description
+- `task-from-template`: pre-approved template mechanism for repetitive tasks — skip full review cycle for known task patterns (TASK-9)
+- `backlog-setup`: seed examples phase and web UI guidance
+
+### Fixed
+- `loop-backlog`: escalate message now includes "answer in Notes, then set status → Ready" prompt so users know exactly how to respond
+- `loop-backlog`: corrected `.backlog/` → `backlog/` path in daemon and SKILL.md
+- `task-from-template`: narrowed freshness check to direct invocations only
+- `templates`: removed internal script details from git-push-release Phase 3
+
+### Changed
+- ADR-001: established `plugin/skills/` as single source of truth; migrated to backlog decision tracking
+
 ## [1.2.0] - 2026-06-17
 
 ### Changed
