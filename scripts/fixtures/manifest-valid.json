@@ -1,0 +1,11 @@
+{
+  "skill": "task-to-backlog",
+  "task_id": null,
+  "entry_point": "createTask",
+  "skip_draft": false,
+  "field_writes": [
+    { "tool": "backlog task edit", "field": "planSet", "source": "/tmp/ttb-plan.md" },
+    { "tool": "backlog task edit", "field": "status", "value": "Backlog" }
+  ],
+  "phases_to_execute": ["createTask", "reviewLoop", "finalise"]
+}

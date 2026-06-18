@@ -541,6 +541,30 @@ if [ "$OVERLAP_EXIT" -ne 0 ]; then
   ERRORS=$((ERRORS + OVERLAP_EXIT))
 fi
 
+# ── Manifest Lint Smoke Tests ─────────────────────────────────────────────────
+
+echo ""
+echo "=== Manifest Lint Smoke Tests ==="
+
+LINT_SCRIPT="${REPO_ROOT}/scripts/skill-lint.sh"
+if [ -f "$LINT_SCRIPT" ]; then
+  if bash "$LINT_SCRIPT" --manifest "${REPO_ROOT}/scripts/fixtures/manifest-valid.json" 2>/dev/null; then
+    pass "skill-lint: valid manifest"
+  else
+    fail "skill-lint: valid manifest should exit 0"
+  fi
+  for bad in manifest-bad-field-description manifest-bad-missing-phase \
+              manifest-bad-entry-point manifest-bad-skip-draft-mismatch; do
+    if ! bash "$LINT_SCRIPT" --manifest "${REPO_ROOT}/scripts/fixtures/${bad}.json" 2>/dev/null; then
+      pass "skill-lint: ${bad} rejected"
+    else
+      fail "skill-lint: ${bad} should exit non-zero"
+    fi
+  done
+else
+  fail "skill-lint.sh not found at $LINT_SCRIPT"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""

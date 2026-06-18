@@ -1,0 +1,10 @@
+{
+  "skill": "task-to-backlog",
+  "task_id": null,
+  "entry_point": "createTask",
+  "skip_draft": false,
+  "field_writes": [
+    { "tool": "backlog task edit", "field": "description", "value": "overwritten" }
+  ],
+  "phases_to_execute": ["createTask", "reviewLoop", "finalise"]
+}
