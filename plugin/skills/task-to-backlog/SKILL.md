@@ -142,7 +142,7 @@ if echo "<topic>" | grep -qiP '^task-\d+$'; then
 else
   # New topic path — create task
   backlog task create "$TITLE" \
-    --status "Plan Draft" \
+    --status "Plan" \
     --description "<topic>" \
     --plain
   # Extract task ID from output line `Task TASK-N`. Write to $TMPDIR/ttb-task-id.txt.
@@ -212,7 +212,7 @@ Spawn Task agent:
 >    ```bash
 >    backlog task edit <TASK_ID> \
 >      --planSet "$(cat $TMPDIR/ttb-plan.md)" \
->      --status "Plan Review"
+>      --status "Plan"
 >    ```
 
 ---

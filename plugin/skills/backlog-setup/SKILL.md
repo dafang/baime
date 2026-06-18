@@ -11,8 +11,7 @@ allowed-tools: Bash, Read, Write
 -- Columns required by each skill
 
 FEATURE_TO_BACKLOG_COLUMNS := [
-  "Proposal Draft", "Proposal Review",
-  "Plan Draft",     "Plan Review",
+  "Proposal", "Plan",
   "Backlog"
 ]
 
@@ -98,11 +97,10 @@ in-place, preserving all other fields.
 
 ```bash
 REQUIRED_COLUMNS=(
-  "Proposal Draft" "Proposal Review"
-  "Plan Draft"     "Plan Review"
+  "Proposal" "Plan"
   "Backlog"
-  "Ready"          "In Progress"
-  "Done"           "Needs Human"
+  "Ready"    "In Progress"
+  "Done"     "Needs Human"
 )
 
 # Read existing statuses and compute missing ones via Python
@@ -111,11 +109,10 @@ import re, sys
 
 CONFIG = "backlog/config.yml"
 REQUIRED = [
-  "Proposal Draft", "Proposal Review",
-  "Plan Draft",     "Plan Review",
+  "Proposal", "Plan",
   "Backlog",
-  "Ready",          "In Progress",
-  "Done",           "Needs Human",
+  "Ready",    "In Progress",
+  "Done",     "Needs Human",
 ]
 
 with open(CONFIG) as f:
@@ -137,10 +134,10 @@ content = re.sub(
     content, flags=re.MULTILINE
 )
 
-# Ensure default_status is "Proposal Draft"
+# Ensure default_status is "Proposal"
 content = re.sub(
     r'^default_status:\s*"[^"]*"',
-    'default_status: "Proposal Draft"',
+    'default_status: "Proposal"',
     content, flags=re.MULTILINE
 )
 

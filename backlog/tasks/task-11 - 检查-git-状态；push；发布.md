@@ -1,10 +1,10 @@
 ---
 id: TASK-11
 title: 检查 git 状态；push；发布
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-17 14:51'
-updated_date: '2026-06-17 14:52'
+updated_date: '2026-06-17 14:55'
 labels: []
 dependencies: []
 ordinal: 2000
@@ -85,4 +85,24 @@ gh release view "v<VERSION>" --repo "$REPO"
 
 <!-- SECTION:NOTES:BEGIN -->
 claimed: 2026-06-17T14:52:08Z
+
+Completed: 2026-06-17T14:55:48Z
+
+## Execution Summary
+
+**Result:** Done  
+**Version Released:** v1.2.2  
+**Commit:** fb5b646c657bae47789e03688b30dd7f17ef27cb  
+**Release URL:** https://github.com/yaleh/baime/releases/tag/v1.2.2  
+
+### Phases Completed
+- Phase 1: Pre-release state verified (clean tree, on main, CHANGELOG entry present, ahead of origin, no existing tag)
+- Phase 2: Dry-run passed (DRY RUN COMPLETE)
+- Phase 3: Release script executed — manifests bumped 1.2.1→1.2.2, committed, tagged v1.2.2, pushed to origin/main + origin/v1.2.2
+- Phase 4: GitHub Actions release workflow completed successfully; GitHub Release v1.2.2 published
+
+### DoD Results
+All DoD checks passed:
+- Phase 3: tag exists locally ✓, tag on remote ✓, main synced with origin ✓
+- Phase 4: workflow success ✓, release visible ✓
 <!-- SECTION:NOTES:END -->

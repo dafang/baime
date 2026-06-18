@@ -1,6 +1,6 @@
 ---
 name: feature-to-backlog
-description: "Converts a feature description into a single backlog task with TDD implementation plan, moving through Proposal Draft → Proposal Review → Plan Draft → Plan Review → Backlog. Two iterative review loops (each converges on APPROVED, soft limit 8 rounds). Ends with the proposal and plan written into the task planSet and the task in Backlog status with native DoD items. No branch creation, no PRs."
+description: "Converts a feature description into a single backlog task with TDD implementation plan, moving through Proposal → Plan → Backlog. Two iterative review loops (each converges on APPROVED, soft limit 8 rounds). Ends with the proposal and plan written into the task planSet and the task in Backlog status with native DoD items. No branch creation, no PRs."
 argument-hint: [feature-topic-or-description]
 allowed-tools: Read, Glob, Grep, Bash, Agent
 ---
@@ -63,8 +63,8 @@ Plan :: {
 -- Description → create a new task and run the full proposal → plan workflow.
 
 EntryPoint = ProposalLoop | PlanLoop
-  -- ProposalLoop : enter proposal reviewLoop (new task, or Proposal Draft/Review status)
-  -- PlanLoop     : skip proposal; enter plan reviewLoop (Plan Draft or Plan Review status)
+  -- ProposalLoop : enter proposal reviewLoop (new task, or Proposal status)
+  -- PlanLoop     : skip proposal; enter plan reviewLoop (Plan status)
 
 resolveOrCreate :: Topic → (Task, EntryPoint)
 resolveOrCreate(T) =
@@ -72,9 +72,8 @@ resolveOrCreate(T) =
   | otherwise   → (createTask(T), ProposalLoop)
 
 fromStatus :: Status → EntryPoint
-fromStatus("Plan Draft")  = PlanLoop
-fromStatus("Plan Review") = PlanLoop
-fromStatus(_)             = ProposalLoop  -- Proposal Draft/Review or other
+fromStatus("Plan") = PlanLoop
+fromStatus(_)      = ProposalLoop  -- Proposal or other
 
 -- Workflow
 
@@ -186,13 +185,13 @@ if echo "<topic>" | grep -qiP '^task-\d+$'; then
   # Determine entry point from status
   TASK_STATUS=$(grep -oP '(?<=Status: .)[ \w]+' $TMPDIR/ftb-existing-task.txt | head -1 | xargs)
   case "$TASK_STATUS" in
-    "Plan Draft"|"Plan Review") echo "PlanLoop"     > $TMPDIR/ftb-entry-point.txt ;;
+    "Plan") echo "PlanLoop"     > $TMPDIR/ftb-entry-point.txt ;;
     *)                          echo "ProposalLoop" > $TMPDIR/ftb-entry-point.txt ;;
   esac
 else
   # New topic path — create task
   backlog task create "$TITLE" \
-    --status "Proposal Draft" \
+    --status "Proposal" \
     --description "<topic>" \
     --plain
   # Extract task ID from output line `Task TASK-N`. Write to $TMPDIR/ftb-task-id.txt.
@@ -232,7 +231,7 @@ If `$TMPDIR/ftb-entry-point.txt` contains `PlanLoop`: skip phase 1b and phases 2
 >    ```bash
 >    backlog task edit <TASK_ID> \
 >      --planSet "$(cat $TMPDIR/ftb-proposal.md)" \
->      --status "Proposal Review"
+>      --status "Proposal"
 >    ```
 >
 > Rules: Background must state WHY, not just WHAT. Each Goal must be verifiable.
@@ -292,7 +291,7 @@ If `$TMPDIR/ftb-entry-point.txt` contains `PlanLoop`: `$TMPDIR/ftb-plan.md` alre
 
 ```bash
 backlog task edit $TASK_ID \
-  --status "Plan Draft" \
+  --status "Plan" \
   --append-notes "Proposal approved. Starting plan draft."
 ```
 
@@ -355,7 +354,7 @@ Spawn Task agent (pass `CFG_TEST_CMD`, `CFG_TEST_ALL`, `CFG_DOC_PATH` as literal
 >    ```bash
 >    backlog task edit <TASK_ID> \
 >      --planSet "$(cat $TMPDIR/ftb-plan.md)" \
->      --status "Plan Review"
+>      --status "Plan"
 >    ```
 
 ---
