@@ -156,8 +156,31 @@ execute(T) = {
   _:      followDescription(T.description, ctx),
   _:      ∀(n, cmd) ∈ enumerate(T.dodCommands): verifyDod(T, n, cmd),
   hash:   conditionalCommit(T),
+  _:      appendSummary(T, hash),
   return: merge(T, hash)
 } | cannotProceed(reason) → escalate(T, reason)
+
+-- appendCheckpoint: record completion of a phase in the task's Implementation Notes.
+-- Called after each ## Phase section in the task Description completes.
+appendCheckpoint :: (Task, PhaseIndex, Summary) → ()
+appendCheckpoint(T, x, summary) =
+  appendNote(T, "Phase " + x + " ✓ " + now() + "\n" + summary)
+
+-- appendDodNote: record pass/fail result of a DoD command.
+-- Called once per DoD item; on failure includes up to 5 lines of error output.
+appendDodNote :: (Task, Int, ShellCmd, Result) → ()
+appendDodNote(T, n, cmd, Pass)       = appendNote(T, "DoD #" + n + ": PASS — " + cmd)
+appendDodNote(T, n, cmd, Fail(out))  = appendNote(T, "DoD #" + n + ": FAIL — " + cmd
+                                                     + "\n" + take(5, lines(out)))
+
+-- appendSummary: write the final Execution Summary before the signal file is written.
+-- Must be called after all phases and DoD checks have completed.
+appendSummary :: (Task, Maybe CommitHash) → ()
+appendSummary(T, hash) =
+  appendNote(T, "## Execution Summary\n"
+               + "Result: " + outcomeLabel(T) + "\n"
+               + "Commit: " + fromMaybe("no changes", hash) + "\n"
+               + executionLog(T))
 
 -- readHumanReply: scan Notes for a human reply written after the last "Escalated:" entry.
 -- Returns a context map that followDescription uses to resolve open questions.
@@ -629,6 +652,22 @@ When done (success):
 
 If you cannot continue without human input (escalation):
   Write file ${TSIGNAL} with content: needs-human: <one-line reason>
+
+## Execution Protocol
+
+**Phase checkpoints**: After completing each ## Phase section described in the task Description, run:
+  backlog task edit ${TID} --append-notes "Phase X ✓ $(date -u +%Y-%m-%dT%H:%M:%SZ)
+  <one-line summary of what was done>"
+
+**DoD verification notes**: For each DoD command run, append:
+  backlog task edit ${TID} --append-notes "DoD #N: PASS|FAIL — <cmd>
+  <up to 5 lines of output on failure>"
+
+**Execution Summary**: Before writing the signal file, append:
+  backlog task edit ${TID} --append-notes "## Execution Summary
+  Result: Done|Needs Human
+  Commit: <hash or 'no changes'>
+  <ordered list of Phase and DoD outcomes>"
 
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 PROMPT_EOF
