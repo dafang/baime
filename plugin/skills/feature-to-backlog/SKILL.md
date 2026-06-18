@@ -1,6 +1,6 @@
 ---
 name: feature-to-backlog
-description: "Converts a feature description into a single backlog task with TDD implementation plan, moving through Proposal → Plan → Backlog. Two iterative review loops (each converges on APPROVED, soft limit 8 rounds). Ends with the proposal and plan written into the task planSet and the task in Backlog status with native DoD items. No branch creation, no PRs."
+description: "Drives the Proposal-to-Backlog pipeline for a software feature: two architect-reviewed cycles (one for Proposal, one for Plan), each converging on APPROVED within 8 rounds. Outputs a planSet entry ready for implementation; does not create branches or open PRs."
 argument-hint: [feature-topic-or-description]
 allowed-tools: Read, Glob, Grep, Bash, Agent
 contracts:

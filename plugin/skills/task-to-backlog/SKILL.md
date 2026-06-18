@@ -1,6 +1,6 @@
 ---
 name: task-to-backlog
-description: "Converts a non-development task (analysis, research, documentation, experiment, survey) into a backlog task. Single draft + review loop produces a phase-based execution plan with shell-verifiable DoD. No TDD structure required. Ends with the plan written into the task planSet and the task in Backlog status with native DoD items."
+description: "Schedules a non-coding work item — research inquiry, audit, survey, experiment, or written report — as a backlog entry. Single draft-and-critique cycle produces a phased execution checklist with shell-command gates. No compilation or test runner required."
 argument-hint: [task-description]
 allowed-tools: Read, Glob, Grep, Bash, Agent
 contracts:
