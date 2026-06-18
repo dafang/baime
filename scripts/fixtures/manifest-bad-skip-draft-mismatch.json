@@ -1,0 +1,8 @@
+{
+  "skill": "task-to-backlog",
+  "task_id": "TASK-12",
+  "entry_point": "resolveOrCreate",
+  "skip_draft": false,
+  "field_writes": [],
+  "phases_to_execute": ["resolveOrCreate", "reviewLoop", "finalise"]
+}

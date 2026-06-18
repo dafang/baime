@@ -125,6 +125,34 @@ If `<topic>` is empty: print usage and stop.
 
 ---
 
+### Phase 0: Manifest Generation and Lint
+
+Before executing any phase, generate a manifest JSON that describes the planned execution:
+
+```json
+{
+  "skill": "task-to-backlog",
+  "task_id": "<TASK-ID or null>",
+  "entry_point": "<resolveOrCreate|createTask>",
+  "skip_draft": "<true if entry_point==\"resolveOrCreate\">",
+  "field_writes": [
+    { "tool": "backlog task edit", "field": "planSet", "source": "$TMPDIR/ttb-plan.md" },
+    { "tool": "backlog task edit", "field": "status", "value": "Backlog" }
+  ],
+  "phases_to_execute": ["<entry_point>", "reviewLoop", "finalise"]
+}
+```
+
+Write the manifest to `$TMPDIR/task-to-backlog-manifest.json`, then validate it:
+
+```bash
+bash scripts/skill-lint.sh --manifest "$TMPDIR/task-to-backlog-manifest.json"
+```
+
+If validation fails, stop and report the error before proceeding.
+
+---
+
 ### Phase 1: resolveOrCreate
 
 Detect whether `<topic>` is an existing task ID or a new description:

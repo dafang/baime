@@ -169,6 +169,34 @@ If `<topic>` is empty: print usage and stop.
 
 ---
 
+### Phase 0: Manifest Generation and Lint
+
+Before executing any phase, generate a manifest JSON that describes the planned execution:
+
+```json
+{
+  "skill": "feature-to-backlog",
+  "task_id": null,
+  "entry_point": "createTask",
+  "skip_draft": false,
+  "field_writes": [
+    { "tool": "backlog task edit", "field": "planSet", "source": "$TMPDIR/ftb-plan.md" },
+    { "tool": "backlog task edit", "field": "status", "value": "Backlog" }
+  ],
+  "phases_to_execute": ["createTask", "proposalLoop", "planLoop", "finalise"]
+}
+```
+
+Write the manifest to `$TMPDIR/feature-to-backlog-manifest.json`, then validate it:
+
+```bash
+bash scripts/skill-lint.sh --manifest "$TMPDIR/feature-to-backlog-manifest.json"
+```
+
+If validation fails, stop and report the error before proceeding.
+
+---
+
 ### Phase 1: resolveOrCreate + maybe draftProposal
 
 **1a. resolveOrCreate** (orchestrator runs directly):
