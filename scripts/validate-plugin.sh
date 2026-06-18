@@ -451,6 +451,96 @@ for skill_dir in "$SKILLS_DIR"/*/; do
     fi
 done
 
+# ── Layer 0: Trigger Overlap Detection ───────────────────────────────────────
+
+echo ""
+echo "=== Layer 0: Trigger Overlap Detection ==="
+
+python3 - "$SKILLS_DIR" <<'PYEOF'
+import sys, re, os
+from itertools import combinations
+
+# ── Configurable threshold ────────────────────────────────────────────────────
+OVERLAP_THRESHOLD = 0.45   # Jaccard on character trigrams; raise to tighten
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def trigrams(text):
+    """Return a set of character trigrams from normalised text."""
+    t = re.sub(r'[^a-z0-9 ]', ' ', text.lower())
+    t = re.sub(r'\s+', ' ', t).strip()
+    return set(t[i:i+3] for i in range(len(t) - 2))
+
+def jaccard(a, b):
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+def extract_description(filepath):
+    """Return the description string from SKILL.md frontmatter, or None."""
+    try:
+        with open(filepath) as f:
+            content = f.read()
+    except OSError:
+        return None
+
+    fm = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    if not fm:
+        return None
+    frontmatter = fm.group(1)
+
+    # Try PyYAML first
+    try:
+        import yaml
+        parsed = yaml.safe_load(frontmatter)
+        if isinstance(parsed, dict) and parsed.get('description'):
+            return str(parsed['description']).strip()
+    except Exception:
+        pass
+
+    # Regex fallback: single-line and quoted variants
+    m = re.search(r'^description:\s*["\']?(.*?)["\']?\s*$', frontmatter, re.MULTILINE)
+    if m:
+        return m.group(1).strip().strip('"\'')
+    return None
+
+# ── Gather descriptions ───────────────────────────────────────────────────────
+skills_dir = sys.argv[1]
+skills = {}   # skill_name -> description string
+
+for entry in sorted(os.listdir(skills_dir)):
+    skill_dir = os.path.join(skills_dir, entry)
+    skill_file = os.path.join(skill_dir, 'SKILL.md')
+    if not os.path.isfile(skill_file):
+        continue
+    desc = extract_description(skill_file)
+    if desc:
+        skills[entry] = desc
+
+# ── Pairwise comparison ───────────────────────────────────────────────────────
+failures = 0
+for (s1, d1), (s2, d2) in combinations(skills.items(), 2):
+    score = jaccard(trigrams(d1), trigrams(d2))
+    if score >= OVERLAP_THRESHOLD:
+        print(f"  FAIL: trigger overlap {score:.2f} >= {OVERLAP_THRESHOLD}"
+              f" between '{s1}' and '{s2}'")
+        failures += 1
+
+if failures == 0:
+    print(f"  PASS: no skill pairs exceed overlap threshold {OVERLAP_THRESHOLD}")
+else:
+    print(f"  FAIL: {failures} pair(s) exceed overlap threshold"
+          f" — rewrite descriptions to be more distinct")
+
+sys.exit(failures)
+PYEOF
+
+# Capture the Python exit code and propagate to $ERRORS
+OVERLAP_EXIT=$?
+if [ "$OVERLAP_EXIT" -ne 0 ]; then
+  ERRORS=$((ERRORS + OVERLAP_EXIT))
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
