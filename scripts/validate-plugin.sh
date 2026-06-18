@@ -462,7 +462,7 @@ import sys, re, os
 from itertools import combinations
 
 # ── Configurable threshold ────────────────────────────────────────────────────
-OVERLAP_THRESHOLD = 0.45   # Jaccard on character trigrams; raise to tighten
+OVERLAP_THRESHOLD = 0.35   # Jaccard on character trigrams; raise to tighten
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
