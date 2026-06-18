@@ -1,6 +1,6 @@
 ---
 name: task-to-backlog
-description: "Converts a non-development task (analysis, research, documentation, experiment, survey) into a backlog task. Single draft + review loop produces a phase-based execution plan with shell-verifiable DoD. No TDD structure required. Ends with a git commit of the plan doc and the task in Backlog status."
+description: "Converts a non-development task (analysis, research, documentation, experiment, survey) into a backlog task. Single draft + review loop produces a phase-based execution plan with shell-verifiable DoD. No TDD structure required. Ends with the plan written into the task planSet and the task in Backlog status with native DoD items."
 argument-hint: [task-description]
 allowed-tools: Read, Glob, Grep, Bash, Agent
 ---
@@ -271,31 +271,11 @@ After each agent run, read `$TMPDIR/ttb-plan-verdict.txt`:
 
 Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 
-> Finalise the backlog task and commit the plan document.
+> Finalise the backlog task: write plan into task and add DoD items.
 >
 > Task ID: `<TASK_ID>` — Slug: `<SLUG>` — Doc root: `<CFG_DOC_PATH>`
 >
-> **Step A — Plan number**:
-> ```bash
-> NEXT_N=$(ls <CFG_DOC_PATH>/plans/ 2>/dev/null \
->   | grep -oP '^\d+' | sort -n | tail -1 \
->   | xargs -I{} expr {} + 1 2>/dev/null || echo "101")
-> ```
->
-> **Step B — Copy plan doc**:
-> ```bash
-> mkdir -p <CFG_DOC_PATH>/plans
-> cp $TMPDIR/ttb-plan.md <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md
-> ```
->
-> **Step C — Commit**:
-> ```bash
-> git add <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md
-> git commit -m "docs(<SLUG>): add task plan"
-> ```
-> Only this file. Verify with `git status` first.
->
-> **Step D — Extract DoD commands and add to task**:
+> **Step B — Write plan into task and add DoD**:
 > ```bash
 > grep -oP '(?<=- \[ \] `)[^`]+(?=`)' $TMPDIR/ttb-plan.md \
 >   > $TMPDIR/ttb-dod-cmds.txt
@@ -306,8 +286,8 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 > done < $TMPDIR/ttb-dod-cmds.txt
 >
 > backlog task edit <TASK_ID> \
+>   --planSet "$(cat $TMPDIR/ttb-plan.md)" \
 >   --status "Backlog" \
->   --append-notes "Plan committed: <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md" \
 >   "${DOD_ARGS[@]}"
 > ```
 >
@@ -315,7 +295,7 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 > ```
 > ✅ Task <TASK_ID> is now in Backlog.
 >
-> 计划草拟 + 审查已完成。文档已提交。
+> 计划草拟 + 审查已完成。
 >
 > 请在 web UI 确认 Definition of Done 命令：
 >   backlog browser --no-open --port 6421
@@ -336,4 +316,4 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 - One task per topic; the same TASK_ID moves through all columns
 - Phase count: minimum 1, maximum 6
 - Must run from the project root of a git repository
-- `$TMPDIR` files are ephemeral; do not reference them after Phase 4 completes
+- Plan text lives in the task's Implementation Plan field; no docs/ files are written

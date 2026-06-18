@@ -1,6 +1,6 @@
 ---
 name: feature-to-backlog
-description: "Converts a feature description into a single backlog task with TDD implementation plan, moving through Proposal Draft → Proposal Review → Plan Draft → Plan Review → Backlog. Two iterative review loops (each converges on APPROVED, soft limit 8 rounds). Ends with a git commit of the docs and the task in Backlog status with native DoD items. No branch creation, no PRs."
+description: "Converts a feature description into a single backlog task with TDD implementation plan, moving through Proposal Draft → Proposal Review → Plan Draft → Plan Review → Backlog. Two iterative review loops (each converges on APPROVED, soft limit 8 rounds). Ends with the proposal and plan written into the task planSet and the task in Backlog status with native DoD items. No branch creation, no PRs."
 argument-hint: [feature-topic-or-description]
 allowed-tools: Read, Glob, Grep, Bash, Agent
 ---
@@ -412,33 +412,11 @@ After each agent run, read `$TMPDIR/ftb-plan-verdict.txt`:
 
 Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 
-> Finalise the backlog task and commit documents to the repository.
+> Finalise the backlog task: write combined proposal + plan into task and add DoD items.
 >
 > Task ID: `<TASK_ID>` — Slug: `<SLUG>` — Doc root: `<CFG_DOC_PATH>`
 >
-> **Step A — Plan number**:
-> ```bash
-> NEXT_N=$(ls <CFG_DOC_PATH>/plans/ 2>/dev/null \
->   | grep -oP '^\d+' | sort -n | tail -1 \
->   | xargs -I{} expr {} + 1 2>/dev/null || echo "101")
-> ```
->
-> **Step B — Copy docs**:
-> ```bash
-> mkdir -p <CFG_DOC_PATH>/proposals <CFG_DOC_PATH>/plans
-> cp $TMPDIR/ftb-proposal.md <CFG_DOC_PATH>/proposals/proposal-<SLUG>.md
-> cp $TMPDIR/ftb-plan.md     <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md
-> ```
->
-> **Step C — Commit**:
-> ```bash
-> git add <CFG_DOC_PATH>/proposals/proposal-<SLUG>.md \
->         <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md
-> git commit -m "docs(<SLUG>): add proposal and plan"
-> ```
-> Only these two files. Verify with `git status` first.
->
-> **Step D — Add DoD to task**:
+> **Step B — Write combined proposal+plan into task and add DoD**:
 > ```bash
 > grep -oP '(?<=- \[ \] `)[^`]+(?=`)' $TMPDIR/ftb-plan.md \
 >   > $TMPDIR/ftb-dod-cmds.txt
@@ -448,9 +426,15 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 >   DOD_ARGS+=("--dod" "$cmd")
 > done < $TMPDIR/ftb-dod-cmds.txt
 >
+> {
+>   cat $TMPDIR/ftb-proposal.md
+>   printf '\n\n---\n\n'
+>   cat $TMPDIR/ftb-plan.md
+> } > $TMPDIR/ftb-combined.md
+>
 > backlog task edit <TASK_ID> \
+>   --planSet "$(cat $TMPDIR/ftb-combined.md)" \
 >   --status "Backlog" \
->   --append-notes "Docs committed: <CFG_DOC_PATH>/proposals/proposal-<SLUG>.md + <CFG_DOC_PATH>/plans/${NEXT_N}-<SLUG>.md" \
 >   "${DOD_ARGS[@]}"
 > ```
 >
@@ -458,7 +442,7 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 > ```
 > ✅ Task <TASK_ID> is now in Backlog.
 >
-> 两轮起草 + 两轮迭代审查已完成。文档已提交。
+> 两轮起草 + 两轮迭代审查已完成。
 >
 > 请在 web UI 审阅 Definition of Done 中的命令：
 >   backlog browser --no-open --port 6421
@@ -479,4 +463,4 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 - One task per feature throughout; the same TASK_ID moves through all columns
 - Phase count in generated plans: minimum 1, maximum 8
 - Must run from the project root of a git repository
-- `$TMPDIR` files are ephemeral; do not reference them after Phase 5 completes
+- Proposal and plan text live in the task's Implementation Plan field; no docs/ files are written
