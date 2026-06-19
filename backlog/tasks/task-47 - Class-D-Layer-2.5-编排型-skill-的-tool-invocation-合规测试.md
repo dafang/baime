@@ -1,10 +1,10 @@
 ---
 id: TASK-47
-title: 'Class D：为编排型 skill 建立 tool-invocation 合规测试框架'
+title: Class D：为编排型 skill 建立 tool-invocation 合规测试框架
 status: Proposal
 assignee: []
 created_date: '2026-06-19 15:00'
-updated_date: '2026-06-19 15:00'
+updated_date: '2026-06-19 15:03'
 labels:
   - experiment
   - skill-quality
@@ -144,3 +144,13 @@ ordinal: 1000
 - [ ] #6 grep -q '"compliance_rate"' experiments/skill-quality/artifacts/analysis/exp-class-d-results.json
 - [ ] #7 bash scripts/validate-plugin.sh
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Phase 1 ✓ 2026-06-19T15:03:01Z: Created 6 Class D fixtures in experiments/skill-quality/fixtures/class-d/ covering all required protocol points
+
+Phase 2 ✓ 2026-06-19T15:03:06Z: Created run-class-d.ts with query_tool_blocks integration, required_sequence validation, and k=5 analytical mode
+
+Phase 3 ✓ 2026-06-19T15:03:13Z: Runner executed successfully — compliance_rate=1.000, auto_ci_eligible=true, all 6 fixtures passed 5/5 runs
+<!-- SECTION:NOTES:END -->
