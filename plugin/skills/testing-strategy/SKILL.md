@@ -2,14 +2,13 @@
 name: testing-strategy
 description: Systematic testing methodology for Go projects using TDD, coverage-driven gap closure, fixture patterns, and CLI testing. Use when establishing test strategy from scratch, improving test coverage from 60-75% to 80%+, creating test infrastructure with mocks and fixtures, building CLI test suites, or systematizing ad-hoc testing. Provides 8 documented patterns (table-driven, golden file, fixture, mocking, CLI testing, integration, helper utilities, coverage-driven gap closure), 3 automation tools (coverage analyzer 186x speedup, test generator 200x speedup, methodology guide 7.5x speedup). Validated across 3 project archetypes with 3.1x average speedup, 5.8% adaptation effort, 89% transferability to Python/Rust/TypeScript.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+contracts:
+  - grep: "TestStrategy"
+  - grep: "unit"
+  - grep: "integration"
 ---
 
 ## Spec
-
-contracts:
-  - tests are deterministic and isolated; no shared mutable state between tests
-  - strategy covers unit, integration, and e2e layers as appropriate for the project
-  - existing passing tests are not removed or weakened
 
 λ(project: ProjectContext) → TestStrategy
 

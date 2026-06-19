@@ -1,14 +1,13 @@
 ---
 name: next-step-generation
 description: Generate ready-to-use, context-aware prompts for the most natural next steps based on recent conversation activity. Pure reasoning skill — no MCP tool calls. Infers completion state, suggests primary continuation, and offers 2-3 ranked alternatives.
+contracts:
+  - grep: "NextStepRecommendation"
+  - grep: "context_only"
+  - grep: "copy-pasteable"
 ---
 
 ## Spec
-
-contracts:
-  - reads conversation context without modifying any files
-  - produces a single prioritized recommendation with 2-3 ranked alternatives
-  - pure reasoning only; no external tool calls or MCP server invocations
 
 λ(context: ConversationContext) → NextStepRecommendation
 

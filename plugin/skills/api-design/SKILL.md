@@ -2,14 +2,13 @@
 name: api-design
 description: Systematic API design methodology with 6 validated patterns covering parameter categorization, safe refactoring, audit-first approach, automated validation, quality gates, and example-driven documentation. Use when designing new APIs, improving API consistency, implementing breaking change policies, or building API quality enforcement. Provides deterministic decision trees (5-tier parameter system), validation tool architecture, pre-commit hook patterns. Validated with 82.5% cross-domain transferability, 37.5% efficiency gains through audit-first refactoring.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+contracts:
+  - grep: "APIDesign"
+  - grep: "non-destructive"
+  - grep: "Audit-First"
 ---
 
 ## Spec
-
-contracts:
-  - designs API from requirements without modifying existing production code
-  - produces OpenAPI/interface spec or structured design artifact
-  - non-destructive: existing code is only read, never modified during design phase
 
 λ(requirements: APIRequirements) → APIDesign
 
@@ -103,7 +102,7 @@ This skill was extracted using systematic knowledge extraction methodology from 
 
 **Context**: Need to improve API schema readability without breaking existing clients.
 
-**Solution**: Leverage JSON specification guarantee that object properties are unordered. Parameter order in schema definition is documentation only.
+**Solution**: Leverage JSON specification guarantee that object properties are unordered. Parameter order in schema definition is documentation only. This is a non-destructive change: no client code breaks because JSON parsers ignore property order.
 
 **Evidence**: 60 lines changed, 100% test pass rate, zero compatibility issues
 

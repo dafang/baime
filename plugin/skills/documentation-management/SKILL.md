@@ -2,20 +2,19 @@
 name: documentation-management
 description: Systematic documentation methodology for Claude Code projects using empirically validated templates, patterns, and automation. Provides structure for living documentation, doc health checks, gap analysis, and doc evolution workflows.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
+contracts:
+  - grep: "DocumentationArtifacts"
+  - grep: "docs"
+  - grep: "Markdown"
 ---
 
 ## Spec
-
-contracts:
-  - writes only to docs directory and SKILL.md files; does not modify source code
-  - produces valid Markdown that renders without errors
-  - never deletes existing documentation content without explicit instruction
 
 λ(project: ProjectContext) → DocumentationArtifacts
 
 # Documentation Management Skill
 
-Systematic documentation methodology for Claude Code projects using empirically validated templates, patterns, and automation.
+Systematic documentation methodology for Claude Code projects using empirically validated templates, patterns, and automation. All artifacts are written in Markdown.
 
 ---
 

@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "exp-a": "npx tsx scripts/run-exp-a.ts",
+    "exp-b": "npx tsx scripts/run-exp-b.ts",
+    "oracle-class-c": "npx tsx scripts/run-oracle-class-c.ts"
   },
   "devDependencies": {
     "dotenv": "^16.6.1",

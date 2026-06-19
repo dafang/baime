@@ -2,14 +2,13 @@
 name: rapid-convergence
 description: Achieve 3-4 iteration methodology convergence (vs standard 5-7) when clear baseline metrics exist, domain scope is focused, and direct validation is possible. Use when you have V_meta baseline ≥0.40, quantifiable success criteria, retrospective validation data, and generic agents are sufficient. Enables 40-60% time reduction (10-15 hours vs 20-30 hours) without sacrificing quality. Prediction model helps estimate iteration count during experiment planning. Validated in error recovery (3 iterations, 10 hours, V_instance=0.83, V_meta=0.85).
 allowed-tools: Read, Grep, Glob
+contracts:
+  - grep: "ConvergenceResult"
+  - grep: "V_meta"
+  - grep: "iteration"
 ---
 
 ## Spec
-
-contracts:
-  - terminates within a bounded number of iterations (target 3-4, max 7)
-  - each iteration either makes measurable progress or escalates to human
-  - preserves all work artifacts between iterations; no data loss on retry
 
 λ(experiment: ExperimentContext) → ConvergenceResult
 

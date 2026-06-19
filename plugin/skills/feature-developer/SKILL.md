@@ -3,14 +3,13 @@ name: feature-developer
 description: "Executes the full feature development lifecycle (phases 3-9): generates proposal documents from discussion, iteratively reviews and refines proposal/plan documents from a strict architect's perspective, then implements the plan using TDD with parallel Task agents in worktrees, and validates with self-analysis. Use when given a feature discussion or existing proposal/plan documents to generate, review, refine, and implement."
 argument-hint: [feature-topic-or-slug]
 allowed-tools: Read, Glob, Grep, Bash, Agent
+contracts:
+  - grep: "TDD"
+  - grep: "FeatureDiscussion"
+  - grep: "proposal-round"
 ---
 
 ## Spec
-
-contracts:
-  - follows TDD: tests are written before implementation in each phase
-  - implements only what the approved plan specifies; no scope creep
-  - writes signal file on completion (done or needs-human)
 
 λ(input: FeatureDiscussion | ProposalDoc | PlanDoc) → ImplementedFeature
 

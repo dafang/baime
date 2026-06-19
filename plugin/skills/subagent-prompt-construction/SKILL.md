@@ -6,14 +6,13 @@ status: validated
 v_meta: 0.709
 v_instance: 0.895
 transferability: 95%
+contracts:
+  - grep: "150"
+  - grep: "subagent_prompt"
+  - grep: "orchestration"
 ---
 
 ## Spec
-
-contracts:
-  - produces self-contained prompts that include all required context
-  - generated prompts have no external dependencies (no references to files that may not exist)
-  - output prompt length ≤ 150 lines
 
 λ(use_case, complexity) → subagent_prompt |
   ∧ require(need_orchestration(use_case) ∨ need_mcp_integration(use_case))

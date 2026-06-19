@@ -14,27 +14,13 @@ tags:
   - automation
   - testing-strategy
 contracts:
-  - only modifies CI configuration files, Makefile, pre-commit hooks, and test configs; never touches business logic
-  - always runs the verification command before signalling completion
-  - produces a passing CI pipeline as the primary deliverable
-  - adds at least one automated test gate (lint, type-check, or test) that blocks merges
-  - idempotent: running twice on the same repo produces the same gate configuration
-  - documents all added gates in a VERIFICATION section visible to future maintainers
-  - adds gate configuration files without removing existing quality gates
-  - gates are verifiable via shell commands (exit code 0 = pass, non-zero = fail)
+  - grep: "GateConfig"
+  - grep: "CI"
+  - grep: "quality gate"
+  - grep: "V_instance"
 ---
 
 ## Spec
-
-contracts:
-  - only modifies CI configuration files, Makefile, pre-commit hooks, and test configs; never touches business logic
-  - always runs the verification command before signalling completion
-  - produces a passing CI pipeline as the primary deliverable
-  - adds at least one automated test gate (lint, type-check, or test) that blocks merges
-  - idempotent: running twice on the same repo produces the same gate configuration
-  - documents all added gates in a VERIFICATION section visible to future maintainers
-  - adds gate configuration files without removing existing quality gates
-  - gates are verifiable via shell commands (exit code 0 = pass, non-zero = fail)
 
 λ(repo: Repo) → GateConfig
 

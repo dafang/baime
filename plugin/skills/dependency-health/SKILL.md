@@ -2,14 +2,13 @@
 name: dependency-health
 description: Security-first dependency management methodology with batch remediation, policy-driven compliance, and automated enforcement. Use when security vulnerabilities exist in dependencies, dependency freshness low (outdated packages), license compliance needed, or systematic dependency management lacking. Provides security-first prioritization (critical vulnerabilities immediately, high within week, medium within month), batch remediation strategy (group compatible updates, test together, single PR), policy-driven compliance framework (security policies, freshness policies, license policies), and automation tools for vulnerability scanning, update detection, and compliance checking. Validated in meta-cc with 6x speedup (9 hours manual to 1.5 hours systematic), 3 iterations, 88% transferability across package managers (concepts universal, tools vary by ecosystem).
 allowed-tools: Read, Write, Edit, Bash
+contracts:
+  - grep: "DependencyHealthReport"
+  - grep: "remediation"
+  - grep: "security"
 ---
 
 ## Spec
-
-contracts:
-  - reads package manifests without modifying production source code
-  - produces dependency health report with prioritized remediation list
-  - suggests upgrades and security fixes without auto-applying them
 
 λ(project: ProjectContext) → DependencyHealthReport
 

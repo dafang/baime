@@ -22,7 +22,19 @@ Every skill MUST document what happens when it cannot complete successfully:
 
 ### contracts:
 
-Each SKILL.md MUST have a `contracts:` line (can be in frontmatter or as a standalone line in the `## Spec` section) listing the key invariants the skill upholds.
+Each SKILL.md MUST have a `contracts:` field in its **YAML frontmatter** listing machine-verifiable invariants in structured format:
+
+```yaml
+contracts:
+  - grep: "some-keyword"       # PASS if pattern found in body
+  - not-grep: "forbidden"      # PASS if pattern absent from body
+```
+
+**Enforcement**: `validate-plugin.sh` Layer 2 reads contracts exclusively from the YAML frontmatter via `yaml.safe_load`. Plain strings or contracts placed in the body (`## Spec` section) are silently skipped — they carry no enforcement weight.
+
+**Pattern selection**: choose terms that must appear in any correct implementation — function names from the λ spec, required section headers, key output type names, or forbidden behaviors. Avoid overly common words.
+
+**Prose invariants** that cannot be expressed as grep patterns (e.g., "idempotent: running twice produces the same result") belong in the body under `## Spec` or `## Constraints` as human documentation only — do not put them in the frontmatter `contracts:` field.
 
 ## Required Sections
 
@@ -37,12 +49,23 @@ A conforming SKILL.md must include:
 
 ## Example Spec Structure
 
+Frontmatter (machine-enforced):
+```yaml
+---
+name: my-skill
+description: "..."
+contracts:
+  - grep: "MyOutputType"
+  - not-grep: "git push --force"
+---
+```
+
+Body (human documentation, not enforced):
 ```
 ## Spec
 
-contracts:
+contracts (prose):
   - never modifies files outside the designated output path
-  - always writes a signal file on completion (done or needs-human)
   - idempotent: running twice produces the same result
 
 λ(input: Input) → Output

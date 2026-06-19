@@ -1,0 +1,53 @@
+name: Layer 2.5 Oracle (Class C)
+
+# Runs the verifyDod branch-selection oracle against Haiku.
+# Requires LLM_BASE_URL and LLM_API_KEY to be set as repository secrets.
+#
+# Trigger: manually (workflow_dispatch) or automatically on push/PR to main
+# when the secrets are configured. The job exits 0 (pass) if Haiku accuracy
+# on Class C fixtures >= 0.80; exits 1 (fail) otherwise.
+#
+# To add secrets:
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret
+#   Names: LLM_BASE_URL, LLM_API_KEY
+#   Values: same as experiments/skill-quality/.env (local dev file)
+#
+# The .env file is gitignored and for local use only. CI reads from secrets.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "plugin/skills/loop-backlog/SKILL.md"
+      - "experiments/skill-quality/fixtures/exp-b/class-c/**"
+      - "experiments/skill-quality/scripts/run-oracle-class-c.ts"
+      - "experiments/skill-quality/lib/**"
+
+jobs:
+  oracle-class-c:
+    name: verifyDod Branch-Selection Oracle
+    runs-on: ubuntu-latest
+    # Skip if secrets not configured (forks, PRs from external contributors)
+    if: vars.ORACLE_ENABLED == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: experiments/skill-quality
+
+      - name: Run Class C oracle
+        run: npx tsx scripts/run-oracle-class-c.ts --threshold 0.80 --k 3
+        working-directory: experiments/skill-quality
+        env:
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          MODEL_PRIMARY: claude-haiku-4-5-20251001

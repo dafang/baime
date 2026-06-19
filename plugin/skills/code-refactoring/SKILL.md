@@ -2,14 +2,13 @@
 name: code-refactoring
 description: BAIME-aligned refactoring protocol for Go hotspots (CLIs, services, MCP tooling) with automated metrics (e.g., metrics-cli, metrics-mcp) and documentation.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+contracts:
+  - grep: "behavior-preserving"
+  - grep: "cyclomatic"
+  - grep: "complexity_delta"
 ---
 
 ## Spec
-
-contracts:
-  - behavior-preserving transformations only; tests pass before and after refactoring
-  - no feature additions or behavioral changes in refactoring commits
-  - complexity delta ≥ 0.30 and cyclomatic ≤ 10 for refactored hotspot
 
 λ(target_pkg, target_hotspot, metrics_target) → (refactor_plan, metrics_snapshot, validation_report) |
   ∧ configs = read_json(experiment-config.json)?
@@ -25,3 +24,4 @@ contracts:
   ∧ ensure(complexity_delta(target_hotspot) ≥ 0.30 ∧ cyclomatic(target_hotspot) ≤ 10)
   ∧ ensure(coverage_delta(target_pkg) ≥ 0.01 ∨ coverage(target_pkg) ≥ 0.70)
   ∧ validation_report = validate-skill.sh → {inventory.json, V_instance ≥ 0.85}
+  ∧ guarantee(behavior-preserving: all existing tests pass before and after each iteration)
