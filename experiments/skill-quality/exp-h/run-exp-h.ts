@@ -40,6 +40,9 @@ const FIXTURE_DIRS: Record<string, string> = {
   'backlog-setup': join(EXP_ROOT, 'fixtures/exp-h/backlog-setup'),
 };
 
+// Sanity (negative control) fixture directory — health check before real experiments
+const SANITY_FIXTURE_DIR = join(EXP_ROOT, 'fixtures/sanity');
+
 function parseArgs() {
   const argv = process.argv.slice(2);
   const get = (flag: string, def: string) => {
@@ -243,6 +246,102 @@ function verdictOnlyScore(extracted: unknown, fixture: BaseFixture): number {
   return scoreForFixture(extracted, fixture);
 }
 
+// ---------- Harness field injection self-check ----------
+// Ensures that when a fixture has semantic fields (state/input/plan/config),
+// the built prompt actually contains content derived from those fields.
+// Motivation: Exp-H Class A false-negative root cause — state was silently dropped
+// by an earlier version of buildPromptExact. This check prevents regression.
+
+function assertPromptInjectsFields(fixture: BaseFixture, prompt: string): void {
+  const ext = fixture as BaseFixture & {
+    state?: Record<string, unknown>;
+    input?: Record<string, unknown>;
+    plan?: Record<string, unknown>;
+    config?: Record<string, unknown>;
+  };
+  const fieldsToCheck: Array<keyof typeof ext> = ['state', 'input', 'plan', 'config'];
+  const missing: string[] = [];
+
+  for (const field of fieldsToCheck) {
+    const value = ext[field];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'object') continue;
+    const keys = Object.keys(value);
+    if (keys.length === 0) continue; // empty object is trivially injected
+
+    const anyKeyPresent = keys.some(k => prompt.includes(k));
+    if (!anyKeyPresent) {
+      missing.push(field);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Injection check FAILED for fixture '${fixture.id}': ` +
+      `fields [${missing.join(', ')}] exist in fixture but no key appears in the built prompt. ` +
+      `Ensure buildPrompt injects all semantic fields into the prompt context.`
+    );
+  }
+}
+
+// ---------- Sanity / negative control check ----------
+// Runs trivially-correct fixtures before the real experiment.
+// If ALL sanity fixtures fail, the harness itself is likely broken.
+// This is a negative control: any competent model must pass these.
+
+async function runSanityCheck(client: ReturnType<typeof createLlmClient>, model: string): Promise<void> {
+  if (!(await fileExists(SANITY_FIXTURE_DIR))) {
+    console.log('(No sanity fixtures directory found — skipping negative control check)');
+    return;
+  }
+
+  const files = (await readdir(SANITY_FIXTURE_DIR)).filter(f => f.endsWith('.json')).sort();
+  if (files.length === 0) {
+    console.log('(No sanity fixtures found — skipping negative control check)');
+    return;
+  }
+
+  console.log(`\n--- Sanity check (negative control, ${files.length} fixture(s)) ---`);
+
+  const sanityFixtures = await Promise.all(
+    files.map(async f => JSON.parse(
+      await readFile(join(SANITY_FIXTURE_DIR, f), 'utf-8')
+    ) as BaseFixture)
+  );
+
+  // Use a minimal prompt for sanity: no real SKILL.md needed
+  const sanitySkillContent = '# sanity-check\nThis is a trivially obvious decision fixture.';
+
+  let passCount = 0;
+  for (const fixture of sanityFixtures) {
+    const prompt = buildPrompt(sanitySkillContent, fixture);
+    // Injection assertion — sanity fixtures must also pass field injection check
+    assertPromptInjectsFields(fixture, prompt);
+
+    try {
+      const resp = await client.chat({ model, messages: [{ role: 'user', content: prompt }] });
+      const extracted = extractAnswerForFixture(resp.content, fixture);
+      const score = scoreForFixture(extracted, fixture);
+      if (score >= 0.99) {
+        console.log(`  PASS sanity: ${fixture.id} → ${JSON.stringify(extracted)}`);
+        passCount++;
+      } else {
+        console.warn(`  FAIL sanity: ${fixture.id} → got ${JSON.stringify(extracted)}, expected ${JSON.stringify(fixture.answer)}`);
+      }
+    } catch (err) {
+      console.warn(`  ERROR sanity: ${fixture.id}: ${(err as Error).message}`);
+    }
+  }
+
+  if (passCount === 0 && sanityFixtures.length > 0) {
+    console.error('\nHARNESS FAULT DETECTED: ALL sanity fixtures failed.');
+    console.error('This indicates a harness or prompt construction problem, not a skill problem.');
+    process.exit(1);
+  }
+
+  console.log(`Sanity check passed: ${passCount}/${sanityFixtures.length} trivial fixtures correct.\n`);
+}
+
 // ---------- Main ----------
 
 async function main() {
@@ -250,6 +349,11 @@ async function main() {
   const opts = parseArgs();
   const client = createLlmClient();
   const model = getModelPrimary();
+
+  // Run sanity / negative control check before real experiment
+  // (only when LLM calls will actually be made, i.e. not in dry-run scenarios)
+  // Comment: sanity fixtures serve as harness health checks — trivial questions any model must answer
+  await runSanityCheck(client, model);
 
   const skillNames = Object.keys(FIXTURE_DIRS);
   const allFixtures: Record<string, BaseFixture[]> = {};
@@ -298,6 +402,8 @@ async function main() {
       }
 
       const prompt = buildPrompt(content, fixture);
+      // Injection self-check: assert all semantic fields appear in the prompt
+      assertPromptInjectsFields(fixture, prompt);
 
       for (let i = 0; i < needed; i++) {
         try {

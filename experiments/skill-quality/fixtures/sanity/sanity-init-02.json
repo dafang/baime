@@ -1,0 +1,16 @@
+{
+  "id": "sanity-init-02",
+  "skill": "backlog-setup",
+  "taskClass": "A",
+  "taskType": "binary-gate",
+  "decisionPoint": "shouldInitialize",
+  "specSection": "shouldInitialize :: Bool → Action\nshouldInitialize(isNew) =\n  | isNew = true  → INITIALIZE\n  | isNew = false → SKIP\n\n-- Answer vocabulary: INITIALIZE or SKIP\n-- If the project is brand new (isNew=true), action is INITIALIZE.",
+  "input": {
+    "isNew": true
+  },
+  "ground_truth_rationale": "isNew is true, so the answer is INITIALIZE. Trivially correct for any competent model. Used as harness health check (negative control / sanity fixture).",
+  "answer": "INITIALIZE",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR",
+  "_sanity_note": "HARNESS HEALTH CHECK: if this fixture fails, the harness itself is broken, not the skill."
+}
