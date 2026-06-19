@@ -1,0 +1,28 @@
+{
+  "experiment": "Exp-F",
+  "title": "Verify whether reference/ is reliably loaded in skill activation path",
+  "registered": "2026-06-19",
+  "hypotheses": {
+    "H-ref": {
+      "description": "Variant B (spec-only, no reference/ content) accuracy < Variant A (full Implementation) accuracy - 10pp",
+      "direction": "reference/ is NOT reliably auto-loaded",
+      "threshold_delta_pp": 10,
+      "predicted_verdict": "CONFIRMED",
+      "rationale": "Claude Code skill activation injects only SKILL.md content; reference/ directory files are not automatically loaded into context. Without the Step 4 criteria, the model must reason from the sparse spec alone, which Exp-D showed degrades accuracy by ~20pp."
+    },
+    "H-load": {
+      "description": "Variant B accuracy >= Variant A accuracy - 5pp (reference/ effectively loaded)",
+      "direction": "reference/ IS auto-loaded",
+      "threshold_delta_pp": 5,
+      "predicted_verdict": "REFUTED",
+      "rationale": "Exp-D showed P-spec (spec-only) vs P-full (full content) gap was ~20pp, strongly suggesting reference/ would not be auto-loaded."
+    }
+  },
+  "design": {
+    "fixtures": "10 freshnessCheck fixtures from exp-a",
+    "variants": ["variant-a (249 lines, full Implementation)", "variant-b (≤40 lines spec-only, no reference/ in context)"],
+    "model": "primary (haiku)",
+    "k": 5,
+    "total_calls": 100
+  }
+}
