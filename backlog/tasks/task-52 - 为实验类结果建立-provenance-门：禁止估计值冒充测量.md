@@ -1,9 +1,10 @@
 ---
 id: TASK-52
 title: 为实验类结果建立 provenance 门：禁止估计值冒充测量
-status: Proposal
+status: Backlog
 assignee: []
 created_date: '2026-06-19 15:58'
+updated_date: '2026-06-19 16:26'
 labels:
   - skill-quality
   - experiment-tooling
@@ -58,9 +59,80 @@ Exp-H（TASK-46）曾被标记 Done，但 `exp-h-results.json` 的 `data_source`
 - [ ] #6 更新 docs 记录该 provenance 机制（含为何引入：Exp-H 伪造结果事件）
 <!-- AC:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+# Plan: 为实验类结果建立 provenance 门：禁止估计值冒充测量
+
+## Context
+Exp-H 曾被标 Done，但结果是 analytical 估计（无 API 调用），σ=0.001 是共享锚点假象，且全部 DoD 是字段存在性 grep，无法区分真跑与手写 JSON。本任务把已在 exp-h 单点修复的 provenance 防护推广为所有实验类工作的统一机制。
+
+## Phase 1: 统一 runner 无数据时的硬失败
+审计 `experiments/skill-quality/` 下所有 runner（exp-a..exp-h 的 `run-*.ts` 及 lib 中的评分入口），将"缺少原始 result 文件时静默降级为估计/0 分"的分支统一改为报错退出（非零码）。新增测试脚本 `experiments/skill-quality/scripts/test-provenance-guard.sh`：在无 result 文件的临时目录上调用分析路径，断言进程**非零退出**（直接验证硬失败行为，而非源码字符串）。该测试同时覆盖至少一个被审计的 runner。
+### DoD
+- [ ] `test -f experiments/skill-quality/scripts/test-provenance-guard.sh`
+- [ ] `bash experiments/skill-quality/scripts/test-provenance-guard.sh`
+
+## Phase 2: 分析输出统一带 data_source 枚举（含回填现有结果）
+所有分析输出 JSON 增加 `data_source` 字段，取值限定 `measured | prior-data | estimated`。**先**为现有 `artifacts/analysis/*-results.json`（exp-a/b/d/e/f/g、class-d 等）按实际来源回填正确的 `data_source`（真实 LLM 测量=measured，复用旧测量=prior-data），**再**交付校验脚本 `experiments/skill-quality/scripts/check-provenance.sh`：无参时遍历 `artifacts/analysis/*-results.json`，任一文件缺 `data_source` 或取值非法即非零退出。
+### DoD
+- [ ] `test -f experiments/skill-quality/scripts/check-provenance.sh`
+- [ ] `bash experiments/skill-quality/scripts/check-provenance.sh`
+- [ ] `for f in experiments/skill-quality/artifacts/analysis/*-results.json; do grep -q '"data_source"' "$f" || exit 1; done`
+
+## Phase 3: estimated 数据禁入 hypothesis 字段
+为 `check-provenance.sh` 增加规则：当单个结果文件 `data_source == "estimated"` 时，不得含顶层 `hypothesis`/`verdict` 字段（估计只能写入 `prediction`）。本 phase 创建一个坏样本 `experiments/skill-quality/scripts/fixtures/bad-estimated-hypothesis.json`（estimated + hypothesis），并让 `check-provenance.sh` 接受单文件入参；通过断言脚本对坏样本**非零退出**来验证规则真的生效。
+### DoD
+- [ ] `test -f experiments/skill-quality/scripts/fixtures/bad-estimated-hypothesis.json`
+- [ ] `! bash experiments/skill-quality/scripts/check-provenance.sh experiments/skill-quality/scripts/fixtures/bad-estimated-hypothesis.json`
+
+## Phase 4: 实验任务完成门校验原始 responses
+新增 `experiments/skill-quality/scripts/check-run-completeness.sh <runs-dir>`：遍历 runs 目录下每个 skill 子目录的 `*/result.json`，从各 `result.json` 的 `responses` 数组长度推断 k（断言同一实验内所有 fixture 的 responses 长度一致即为 k），并断言 fixture 数 ≥ 1、每个 result.json 的 responses 非空；任一不满足即非零退出。k 不依赖结果 JSON 顶层字段（exp-h-results.json 无 k 字段），仅从 run 产物推断。对 exp-h 现有产物运行通过。
+### DoD
+- [ ] `test -f experiments/skill-quality/scripts/check-run-completeness.sh`
+- [ ] `bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/skill-quality/artifacts/runs/exp-h`
+
+## Phase 5: 聚合统计 suspiciously-low 警告
+在 runner 的方差/聚合计算处增加 sanity check：σ 低于设定下界（如 0.005）时在输出 JSON 中标记 `suspiciously_low: true` 并打印警告。为该逻辑写单元测试（构造一组近乎相同的输入，断言标记为真）。
+### DoD
+- [ ] `grep -qi 'suspiciously' experiments/skill-quality/exp-h/run-exp-h.ts`
+- [ ] `test -f experiments/skill-quality/scripts/test-suspicious-sigma.sh`
+- [ ] `bash experiments/skill-quality/scripts/test-suspicious-sigma.sh`
+
+## Phase 6: 文档记录 provenance 门
+在 `docs/skill-quality-engineering.md` 记录 provenance 门机制、三种 data_source 含义、以及引入动机（Exp-H 伪造结果事件）。
+### DoD
+- [ ] `grep -q 'provenance' docs/skill-quality-engineering.md`
+- [ ] `grep -q 'data_source' docs/skill-quality-engineering.md`
+
+## Constraints
+- 不修改已有真实测量结果的数值（exp-a..exp-h 的 measured 数据保持不变；仅回填 data_source 字段）
+- 不引入对外网络依赖；测试脚本不得真实调用 LLM API
+- 仅在 experiments/skill-quality/ 范围内改动 runner/脚本，不触碰 plugin/skills 行为
+- Fixture 质量与 harness 字段注入问题不在本任务范围（见 TASK-53）
+
+## Acceptance Gate
+- [ ] `bash experiments/skill-quality/scripts/check-provenance.sh`
+- [ ] `bash experiments/skill-quality/scripts/test-provenance-guard.sh`
+- [ ] `bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/skill-quality/artifacts/runs/exp-h`
+- [ ] `bash scripts/validate-plugin.sh`
+<!-- SECTION:PLAN:END -->
+
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 bash scripts/validate-plugin.sh
-- [ ] #2 实验 runner 无数据时报错退出有自动化测试覆盖
-- [ ] #3 docs/skill-quality-experiments-summary.md 或 docs/skill-quality-engineering.md 记录 provenance 门
+- [ ] #1 test -f experiments/skill-quality/scripts/test-provenance-guard.sh
+- [ ] #2 bash experiments/skill-quality/scripts/test-provenance-guard.sh
+- [ ] #3 test -f experiments/skill-quality/scripts/check-provenance.sh
+- [ ] #4 bash experiments/skill-quality/scripts/check-provenance.sh
+- [ ] #5 for f in experiments/skill-quality/artifacts/analysis/*-results.json; do grep -q '"data_source"' "$f" || exit 1; done
+- [ ] #6 test -f experiments/skill-quality/scripts/fixtures/bad-estimated-hypothesis.json
+- [ ] #7 ! bash experiments/skill-quality/scripts/check-provenance.sh experiments/skill-quality/scripts/fixtures/bad-estimated-hypothesis.json
+- [ ] #8 test -f experiments/skill-quality/scripts/check-run-completeness.sh
+- [ ] #9 bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/skill-quality/artifacts/runs/exp-h
+- [ ] #10 grep -qi 'suspiciously' experiments/skill-quality/exp-h/run-exp-h.ts
+- [ ] #11 test -f experiments/skill-quality/scripts/test-suspicious-sigma.sh
+- [ ] #12 bash experiments/skill-quality/scripts/test-suspicious-sigma.sh
+- [ ] #13 grep -q 'provenance' docs/skill-quality-engineering.md
+- [ ] #14 grep -q 'data_source' docs/skill-quality-engineering.md
+- [ ] #15 bash scripts/validate-plugin.sh
 <!-- DOD:END -->
