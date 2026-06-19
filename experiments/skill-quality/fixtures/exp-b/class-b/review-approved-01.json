@@ -1,0 +1,22 @@
+{
+  "id": "review-approved-01",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "specSection": "reviewPlan :: Plan → Verdict\nreviewPlan(P) = {\n  assert: ¬empty(P.phases),\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.instructions),\n    assert: ¬empty(phase.dod),\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: ¬empty(P.acceptance),\n  assert: ∀cmd ∈ P.acceptance: isShellCmd(cmd),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "plan": {
+    "phases": [
+      {
+        "title": "Implement feature",
+        "instructions": "Write the implementation in src/feature.ts following the existing patterns.",
+        "dod": ["npx tsc --noEmit", "npm test"]
+      }
+    ],
+    "constraints": [],
+    "acceptance": ["bash scripts/validate-plugin.sh"]
+  },
+  "answer": {
+    "verdict": "APPROVED",
+    "failing_invariants": []
+  },
+  "answerType": "partial"
+}

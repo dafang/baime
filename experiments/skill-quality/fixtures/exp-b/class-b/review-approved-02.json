@@ -1,0 +1,27 @@
+{
+  "id": "review-approved-02",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "specSection": "reviewPlan :: Plan → Verdict\nreviewPlan(P) = {\n  assert: ¬empty(P.phases),\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.instructions),\n    assert: ¬empty(phase.dod),\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: ¬empty(P.acceptance),\n  assert: ∀cmd ∈ P.acceptance: isShellCmd(cmd),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "plan": {
+    "phases": [
+      {
+        "title": "Migrate schema",
+        "instructions": "Run the database migration script and verify the new schema is applied.",
+        "dod": ["bash scripts/migrate.sh", "psql -c '\\d users'"]
+      },
+      {
+        "title": "Update API layer",
+        "instructions": "Update the REST endpoints to use the new schema fields.",
+        "dod": ["npm test -- --grep 'API'", "curl -s http://localhost:3000/health | grep -q ok"]
+      }
+    ],
+    "constraints": ["Must be backwards compatible with v1 clients"],
+    "acceptance": ["bash scripts/validate-plugin.sh", "npm run test:integration"]
+  },
+  "answer": {
+    "verdict": "APPROVED",
+    "failing_invariants": []
+  },
+  "answerType": "partial"
+}

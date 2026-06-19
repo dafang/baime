@@ -1,0 +1,16 @@
+{
+  "id": "review-fail-empty-phases",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "specSection": "reviewPlan :: Plan → Verdict\nreviewPlan(P) = {\n  assert: ¬empty(P.phases),\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.instructions),\n    assert: ¬empty(phase.dod),\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: ¬empty(P.acceptance),\n  assert: ∀cmd ∈ P.acceptance: isShellCmd(cmd),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "plan": {
+    "phases": [],
+    "constraints": [],
+    "acceptance": ["bash scripts/validate-plugin.sh"]
+  },
+  "answer": {
+    "verdict": "NEEDS_REVISION",
+    "failing_invariants": ["¬empty(phases)"]
+  },
+  "answerType": "partial"
+}

@@ -1,0 +1,46 @@
+{
+  "generated": "2026-06-19T10:26:44.621Z",
+  "class_accuracy": {
+    "A": {
+      "claude-haiku-4-5-20251001": 0.7,
+      "glm-4_5-flash": 0.58
+    },
+    "B": {
+      "claude-haiku-4-5-20251001": 0.625,
+      "glm-4_5-flash": 0.5625
+    },
+    "C": {
+      "claude-haiku-4-5-20251001": 1,
+      "glm-4_5-flash": 0.8333333333333334,
+      "claude-sonnet-4-6": 1
+    }
+  },
+  "hypotheses": {
+    "H-oracle-A": {
+      "verdict": "REJECTED",
+      "haiku_f1": 0.7,
+      "threshold": 0.85
+    },
+    "H-oracle-B": {
+      "verdict": "REJECTED",
+      "haiku_f1": 0.625,
+      "threshold": 0.7
+    },
+    "H-oracle-C": {
+      "verdict": "CONFIRMED",
+      "haiku_f1": 1,
+      "threshold": 0.8
+    }
+  },
+  "cross_model_rho": null,
+  "haiku_vs_sonnet_C": {
+    "haiku": 1,
+    "sonnet": 1,
+    "gap": 0
+  },
+  "layer25_recommendations": {
+    "A": "manual-review",
+    "B": "manual-review",
+    "C": "auto-CI"
+  }
+}

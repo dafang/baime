@@ -1,0 +1,12 @@
+{
+  "id": "vdod-pass-01",
+  "taskClass": "C",
+  "taskType": "branch-selection",
+  "specSection": "verifyDod :: (Task, Int, ShellCmd) → ()\nverifyDod(T, n, cmd) =\n  | eval(cmd).exitCode == 0 → checkDod(T, n)\n  | attempts(n) < 3         → fix(); verifyDod(T, n, cmd)\n  | otherwise               → raise Stuck(n, cmd)",
+  "state": {
+    "exitCode": 0,
+    "attempts_so_far": 1
+  },
+  "answer": "checkDod",
+  "answerType": "exact"
+}
