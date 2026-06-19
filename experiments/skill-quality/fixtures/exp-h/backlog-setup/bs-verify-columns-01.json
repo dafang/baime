@@ -1,0 +1,15 @@
+{
+  "id": "bs-verify-columns-01",
+  "skill": "backlog-setup",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "decisionPoint": "verifyColumns",
+  "specSection": "REQUIRED_COLUMNS := [\"Proposal\", \"Plan\", \"Backlog\", \"Ready\", \"In Progress\", \"Done\", \"Needs Human\"]\nverifyColumns :: [String] → [String]\nverifyColumns(required) = required ∖ existingColumns()",
+  "state": {
+    "existingColumns": ["Proposal", "Plan", "Backlog", "Ready", "In Progress", "Done", "Needs Human"]
+  },
+  "ground_truth_rationale": "All 7 required columns are present. The set difference REQUIRED_COLUMNS \\ existingColumns() = [] (empty). No columns to add.",
+  "answer": [],
+  "answerType": "set",
+  "fixtureClass": "CLEAR"
+}

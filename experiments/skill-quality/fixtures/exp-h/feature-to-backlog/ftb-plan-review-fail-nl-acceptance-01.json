@@ -1,0 +1,31 @@
+{
+  "id": "ftb-plan-review-fail-nl-acceptance-01",
+  "skill": "feature-to-backlog",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "decisionPoint": "reviewPlan",
+  "specSection": "reviewPlan :: (Plan, Config) → Verdict\nreviewPlan(P, cfg) = {\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.tests),\n    assert: phase.dod[0] starts with cfg.testCmd,\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: P.acceptance[0] == cfg.testAll,\n  assert: ∀goal ∈ proposal.goals: coveredBy(goal, P.phases ∪ P.acceptance),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "config": {
+    "testCmd": "go test ./...",
+    "testAll": "go test ./..."
+  },
+  "plan": {
+    "phases": [
+      {
+        "title": "Implement rate limiter",
+        "tests": ["pkg/ratelimit/ratelimit_test.go"],
+        "impl": ["pkg/ratelimit/ratelimit.go"],
+        "dod": ["go test ./pkg/ratelimit/...", "go vet ./..."]
+      }
+    ],
+    "constraints": [],
+    "acceptance": ["go test ./...", "Manually verify rate limiting works under load"]
+  },
+  "ground_truth_rationale": "acceptance[1] is 'Manually verify rate limiting works under load' — a natural language criterion, not an executable shell command. The invariant ∀cmd ∈ P.acceptance: isShellCmd(cmd) fails. Verdict must be NEEDS_REVISION.",
+  "answer": {
+    "verdict": "NEEDS_REVISION",
+    "failing_invariants": ["∀cmd ∈ P.acceptance: isShellCmd(cmd)"]
+  },
+  "answerType": "partial",
+  "fixtureClass": "CLEAR"
+}

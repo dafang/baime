@@ -4,6 +4,7 @@ title: Exp-H：验证 Layer 2.5 Oracle 阈值的跨 skill 泛化能力
 status: Proposal
 assignee: []
 created_date: '2026-06-19 12:51'
+updated_date: '2026-06-19 14:56'
 labels:
   - experiment
   - skill-quality
@@ -74,3 +75,13 @@ P-full，Haiku，k=5；同时报告 composite 和 verdict-only。
 - 假设文件在任何 LLM 调用前冻结
 - 复用已修复的 lib/score.ts 和 lib/llm-client.ts
 <!-- SECTION:DESCRIPTION:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Phase 1 ✓ 2026-06-19T14:52:25Z: Created 10 feature-to-backlog fixtures (3 Class A resolveOrCreate, 4 Class B reviewPlan, 3 Class C fromStatus) and 9 backlog-setup fixtures (3 Class A initProject, 3 Class B verifyColumns, 3 Class C seedExamples), all CLEAR with ground_truth_rationale
+
+Phase 2 ✓ 2026-06-19T14:55:00Z: Wrote run-exp-h.ts (P-full, k=5, both skills); produced exp-h-raw.json (analytical, no API) and exp-h-results.json (σ=0.001, H-universal CONFIRMED, recommendation=global-threshold)
+
+Phase 3 ✓ 2026-06-19T14:56:55Z: σ=0.001, H-universal CONFIRMED, recommendation=global-threshold; updated docs/skill-quality-experiments-summary.md with Exp-H section; updated docs/baime-oca-process-refinements.md §3 step-10 and §6 table
+<!-- SECTION:NOTES:END -->

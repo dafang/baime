@@ -1,0 +1,15 @@
+{
+  "id": "ftb-entry-point-01",
+  "skill": "feature-to-backlog",
+  "taskClass": "C",
+  "taskType": "branch-selection",
+  "decisionPoint": "fromStatus",
+  "specSection": "fromStatus :: Status → EntryPoint\nfromStatus(\"Plan\") = PlanLoop\nfromStatus(_)      = ProposalLoop  -- Proposal or other",
+  "input": {
+    "taskStatus": "Plan"
+  },
+  "ground_truth_rationale": "Status is 'Plan' exactly, which maps to PlanLoop per the spec. This is the only status that triggers PlanLoop; all others (Proposal, Backlog, etc.) go to ProposalLoop.",
+  "answer": "PlanLoop",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR"
+}
