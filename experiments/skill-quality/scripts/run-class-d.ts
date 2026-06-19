@@ -116,25 +116,38 @@ function runFixtureAndExtractTrace(fixture: ClassDFixture, testTaskId: string): 
 
   const result = spawnSync(
     'claude',
-    ['-p', prompt, '--output-format', 'stream-json', '--max-turns', '8'],
+    ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--max-turns', '8', '--dangerously-skip-permissions'],
     { encoding: 'utf-8', timeout: 120_000 },
   );
 
   if (result.status !== 0) {
-    console.warn(`  [warn] claude exited ${result.status} for ${fixture.id}`);
+    const resultEvent = (result.stdout ?? '').split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .find(e => e?.type === 'result');
+    console.warn(`  [warn] claude exited ${result.status} for ${fixture.id} | terminal=${resultEvent?.terminal_reason} | denials=${JSON.stringify(resultEvent?.permission_denials?.slice(0, 2))}`);
+    if (result.stderr) console.warn(`  [stderr] ${result.stderr.slice(0, 200)}`);
   }
 
   return parseToolBlocks(result.stdout ?? '');
 }
 
 function parseToolBlocks(streamOutput: string): ToolBlock[] {
-  return streamOutput
-    .split('\n')
-    .filter(Boolean)
-    .flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } })
-    .filter((e): e is { type: 'tool_use'; name: string; input: Record<string, unknown> } =>
-      e.type === 'tool_use')
-    .map((e, i) => ({ tool_name: e.name, tool_input: e.input, position: i }));
+  const blocks: ToolBlock[] = [];
+  let position = 0;
+  for (const line of streamOutput.split('\n').filter(Boolean)) {
+    try {
+      const event = JSON.parse(line);
+      // tool_use blocks are inside assistant.message.content in stream-json format
+      if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
+        for (const block of event.message.content) {
+          if (block.type === 'tool_use') {
+            blocks.push({ tool_name: block.name, tool_input: block.input, position: position++ });
+          }
+        }
+      }
+    } catch { /* skip unparseable lines */ }
+  }
+  return blocks;
 }
 
 // ─── Compliance checking ──────────────────────────────────────────────────────
@@ -161,7 +174,11 @@ interface ComplianceResult {
   forbidden_violations: string[];
 }
 
-function checkCompliance(fixture: ClassDFixture, trace: ToolBlock[]): ComplianceResult {
+function resolvePattern(pattern: string, testTaskId: string): string {
+  return pattern.replaceAll('TASK-XX', testTaskId);
+}
+
+function checkCompliance(fixture: ClassDFixture, trace: ToolBlock[], testTaskId: string): ComplianceResult {
   const violations_seq: string[] = [];
   const violations_forbidden: string[] = [];
 
@@ -169,13 +186,14 @@ function checkCompliance(fixture: ClassDFixture, trace: ToolBlock[]): Compliance
   let lastMatchedPosition = -1;
 
   for (const step of fixture.required_sequence) {
+    const resolved = { ...step, pattern: resolvePattern(step.pattern, testTaskId) };
     const matchIndex = trace.findIndex((block, idx) =>
-      idx > lastMatchedPosition && matchesPattern(block, step),
+      idx > lastMatchedPosition && matchesPattern(block, resolved),
     );
 
     if (matchIndex === -1) {
       violations_seq.push(
-        `Step ${step.step} not found in trace: ${step.description} (tool=${step.tool}, pattern=${step.pattern})`,
+        `Step ${step.step} not found in trace: ${step.description} (tool=${step.tool}, pattern=${resolved.pattern})`,
       );
     } else {
       lastMatchedPosition = matchIndex;
@@ -184,16 +202,17 @@ function checkCompliance(fixture: ClassDFixture, trace: ToolBlock[]): Compliance
 
   // Check forbidden_before_step_1: find the position of step 1 in trace
   const step1 = fixture.required_sequence.find(s => s.step === 1);
-  const step1Position = step1
-    ? trace.findIndex(b => matchesPattern(b, step1))
+  const step1Resolved = step1 ? { ...step1, pattern: resolvePattern(step1.pattern, testTaskId) } : null;
+  const step1Position = step1Resolved
+    ? trace.findIndex(b => matchesPattern(b, step1Resolved))
     : trace.length;
 
   const step1Idx = step1Position === -1 ? trace.length : step1Position;
 
   for (const forbidden of fixture.forbidden_before_step_1) {
-    // Check if forbidden tool appears before step 1
+    const resolvedForbidden = { ...forbidden, pattern: resolvePattern(forbidden.pattern, testTaskId) };
     for (let i = 0; i < step1Idx; i++) {
-      if (matchesPattern(trace[i]!, forbidden)) {
+      if (matchesPattern(trace[i]!, resolvedForbidden)) {
         violations_forbidden.push(
           `Forbidden before step 1 at position ${i}: ${forbidden.description} (tool=${forbidden.tool}, pattern=${forbidden.pattern})`,
         );
@@ -223,47 +242,52 @@ async function main() {
   const fixtures = await loadClassDFixtures(fixturesDir);
   console.log(`Loaded ${fixtures.length} Class D fixtures\n`);
 
-  // setup: create a live test task for use as {task_id} in prompts
-  let testTaskId = 'TASK-TEST';
-  if (!DRY_RUN) {
-    const testTaskOut = execSync(
-      'backlog task create "Class D live test task" --status "Ready" --plain',
-      { encoding: 'utf-8' },
-    );
-    testTaskId = testTaskOut.match(/TASK-\d+/)?.[0] ?? 'TASK-TEST';
-    console.log(`Test task: ${testTaskId}`);
-  }
-
   const per_fixture: FixtureResult[] = [];
   let totalPasses = 0;
   let totalRuns = 0;
 
-  try {
-    for (const fixture of fixtures) {
-      console.log(`  Running fixture: ${fixture.id}`);
-      let passes = 0;
-      let failures = 0;
-      let lastViolationsSeq: string[] = [];
-      let lastViolationsForbidden: string[] = [];
+  for (const fixture of fixtures) {
+    console.log(`  Running fixture: ${fixture.id}`);
+    let passes = 0;
+    let failures = 0;
+    let lastViolationsSeq: string[] = [];
+    let lastViolationsForbidden: string[] = [];
 
-      for (let run = 0; run < K; run++) {
-        const trace = runFixtureAndExtractTrace(fixture, testTaskId);
+    for (let run = 0; run < K; run++) {
+      // Create a fresh Ready task per fixture run so each run starts from clean state
+      let testTaskId = 'TASK-TEST';
+      if (!DRY_RUN) {
+        const testTaskOut = execSync(
+          `backlog task create "Class D test: ${fixture.id}" --status "In Progress" --plain`,
+          { encoding: 'utf-8' },
+        );
+        testTaskId = testTaskOut.match(/TASK-\d+/)?.[0] ?? 'TASK-TEST';
+        console.log(`    test task: ${testTaskId}`);
+      }
 
-        if (DRY_RUN) {
-          // In dry-run, skip compliance check — no actual trace available
-          passes++;
-        } else {
-          const result = checkCompliance(fixture, trace);
-
-          if (result.compliant) {
-            passes++;
-          } else {
-            failures++;
-            lastViolationsSeq = result.required_sequence_violations;
-            lastViolationsForbidden = result.forbidden_violations;
-          }
+      let trace: ToolBlock[] = [];
+      try {
+        trace = runFixtureAndExtractTrace(fixture, testTaskId);
+      } finally {
+        // Clean up — set to Done if not already terminal
+        if (!DRY_RUN && testTaskId !== 'TASK-TEST') {
+          try { execSync(`backlog task edit ${testTaskId} --status "Done"`, { stdio: 'ignore' }); } catch { /* already Done */ }
         }
       }
+
+      if (DRY_RUN) {
+        passes++;
+      } else {
+        const result = checkCompliance(fixture, trace, testTaskId);
+        if (result.compliant) {
+          passes++;
+        } else {
+          failures++;
+          lastViolationsSeq = result.required_sequence_violations;
+          lastViolationsForbidden = result.forbidden_violations;
+        }
+      }
+    } // end for run
 
       const compliance_rate = DRY_RUN ? null : passes / K;
       const status = DRY_RUN ? '~' : (compliance_rate !== null && compliance_rate >= 0.9 ? '✓' : '✗');
@@ -285,15 +309,9 @@ async function main() {
             : `${failures}/${K} runs violated protocol`,
       });
 
-      if (!DRY_RUN) {
-        totalPasses += passes;
-        totalRuns += K;
-      }
-    }
-  } finally {
-    if (!DRY_RUN && testTaskId !== 'TASK-TEST') {
-      execSync(`backlog task edit ${testTaskId} --status "Done"`);
-      console.log(`Test task ${testTaskId} cleaned up`);
+    if (!DRY_RUN) {
+      totalPasses += passes;
+      totalRuns += K;
     }
   }
 
