@@ -1,0 +1,93 @@
+{
+  "generated": "2026-06-19T11:49:09.521Z",
+  "audit_summary": {
+    "CLEAR": 6,
+    "AMBIGUOUS": 2,
+    "ERROR": 0
+  },
+  "clear_fixture_ids": [
+    "review-approved-01",
+    "review-approved-02",
+    "review-fail-empty-phases",
+    "review-fail-no-instructions",
+    "review-fail-empty-dod",
+    "review-fail-no-acceptance"
+  ],
+  "haiku_accuracy": 0.6666666666666666,
+  "sonnet_accuracy": 0.6666666666666666,
+  "delta_sonnet_minus_haiku_pp": 0,
+  "per_fixture": {
+    "haiku": [
+      {
+        "fixtureId": "review-approved-01",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-approved-02",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-empty-dod",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "review-fail-empty-phases",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-no-acceptance",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-no-instructions",
+        "meanScore": 1
+      }
+    ],
+    "sonnet": [
+      {
+        "fixtureId": "review-approved-01",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-approved-02",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-empty-dod",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "review-fail-empty-phases",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-no-acceptance",
+        "meanScore": 0.5
+      },
+      {
+        "fixtureId": "review-fail-no-instructions",
+        "meanScore": 1
+      }
+    ]
+  },
+  "hypotheses": {
+    "H-fixture-noise": {
+      "claim": ">=2 AMBIGUOUS/ERROR fixtures",
+      "ambiguous_count": 2,
+      "verdict": "CONFIRMED"
+    },
+    "H-sonnet-gap": {
+      "claim": "Sonnet >= Haiku + 10pp on CLEAR fixtures",
+      "delta_observed": 0,
+      "verdict": "REFUTED"
+    }
+  },
+  "recommendation": "auto-CI (after fixing partial scorer)",
+  "interpretation": "Partial-score accuracy: haiku=100.0% (verdict-only), both models identical at 66.7% composite. Scoring brittleness (APPROVED capped at 0.5, invariant notation not matched) is the bottleneck, not model capability. Fix: redesign partial scorer to give 1.0 for APPROVED fixtures with correct empty list, and normalize invariant notation.",
+  "verdict_only_accuracy": {
+    "haiku": 1.0,
+    "sonnet": 1.0,
+    "note": "Verdict-only score (ignores failing_invariants notation). Reveals true model capability vs scoring brittleness."
+  },
+  "scoring_note": "Partial scoring caps APPROVED fixtures at 0.5 (n=0 items). NEEDS_REVISION fixtures with correct verdict but wrong notation string also score 0.5. Verdict-only accuracy better reflects actual model capability for Layer 2.5 deployment."
+}

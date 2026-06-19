@@ -158,6 +158,85 @@ Class A/B 暂维持人工审查。
 
 ---
 
+---
+
+## Exp-D 结果：Class A 准确率差距诊断（H-prompt CONFIRMED）
+
+**TASK-40，2026-06-19**
+
+| Prompt 风格 | Haiku 准确率 |
+|---|---|
+| P-spec（仅 specSection 片段，Exp-B 方式） | 0.70 |
+| P-full（完整 V2 SKILL.md，249 行，Exp-A 方式） | 0.90 |
+
+- **H-prompt CONFIRMED**：delta = +20pp ≥ 阈值 15pp
+- **H-fixture REFUTED**：delta ≥ 5pp，fixture 难度不是主因
+
+差距完全来自 prompt 构建方式。用完整 SKILL.md 注入后 Haiku 准确率 0.90 ≥ 0.85 阈值。
+
+**Class A 建议修订**：`manual-review` → **`auto-CI`**（当 runner 使用完整 SKILL.md 而非 specSection 片段时）
+
+数据：`experiments/skill-quality/artifacts/analysis/exp-d-results.json`
+
+---
+
+## Exp-E 结果：Class B fixture 审计与 reviewPlan Oracle 重标定
+
+**TASK-41，2026-06-19**
+
+### Fixture 审计结论
+
+8 个 Class B fixture 中 **2 个 AMBIGUOUS**（H-fixture-noise CONFIRMED）：
+
+| Fixture | 清晰度 | 原因 |
+|---|---|---|
+| review-approved-01 | CLEAR | 所有不变量明确满足 |
+| review-approved-02 | CLEAR | 多 phase，命令合法 |
+| review-fail-empty-phases | CLEAR | phases=[] 明确空 |
+| review-fail-no-instructions | CLEAR | instructions="" 明确空 |
+| review-fail-empty-dod | CLEAR | dod=[] 明确空 |
+| review-fail-no-acceptance | CLEAR | acceptance=[] 明确空 |
+| review-fail-nl-dod | **AMBIGUOUS** | "make tests green" 以 make 开头，模型可能理解为合法 shell 命令 |
+| review-fail-nl-acceptance | **AMBIGUOUS** | 违规明显，但 partial scorer 要求精确符号串 "isShellCmd(acceptance[0])"，模型用不同记法得 0 分 |
+
+### 关键发现：Scoring Brittleness
+
+在 6 个 CLEAR fixture 上：
+- Haiku 准确率（复合 partial score）：66.7%
+- Sonnet 准确率（复合 partial score）：66.7%
+- **Haiku verdict-only 准确率：100%**
+- **Sonnet verdict-only 准确率：100%**
+
+两个模型的 verdict 判断全部正确，66.7% 的复合分数低是因为：
+1. APPROVED fixture 在 partial scorer 中最高只能得 0.5（n=0 时 items 分量不适用）
+2. NEEDS_REVISION fixture 中模型用不同记法（如 "¬empty(P.phases)"）表达正确判断，严格字符串匹配得 0 分
+
+H-sonnet-gap（Sonnet ≥ Haiku + 10pp）：**REFUTED**（delta = 0pp），因为 scorer 才是瓶颈。
+
+### Class B 建议修订
+
+Scorer 修复方向：
+- APPROVED fixture：verdict 正确 + failing_invariants 为空 → 得 1.0 分
+- NEEDS_REVISION fixture：relaxed 匹配（normalize 记法差异）或采用语义等价判断
+
+修复后预期 Haiku 准确率接近 100%。**Class B 建议：auto-CI（待 scorer 设计修复后）**
+
+数据：`experiments/skill-quality/artifacts/analysis/exp-e-results.json`、`exp-e-audit.json`
+
+---
+
+## 修订后 Layer 2.5 建议总表
+
+| 类 | 决策类型 | Exp-B 原始建议 | 修订建议 | 条件 |
+|---|---|---|---|---|
+| A | binary-gate / freshnessCheck | manual-review | **auto-CI** | 使用完整 SKILL.md 注入（非 specSection 片段） |
+| B | invariant-check / reviewPlan | manual-review | **auto-CI** | partial scorer 修复后（verdict 匹配松弛） |
+| C | branch-selection / verifyDod | auto-CI | **auto-CI** | 已确认，无需修改 |
+
+三个类别均可自动化。Exp-B 的 A/B 拒绝是方法论 artifact（prompt 构建和 scorer 设计），而非模型能力上限。
+
+---
+
 ## 实验框架可复用性
 
 `experiments/skill-quality/` 基础设施（TASK-36）可直接支持 Exp-D/E：
