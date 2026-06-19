@@ -237,6 +237,42 @@ Scorer 修复方向：
 
 ---
 
+---
+
+## Exp-F 结果：reference/ 加载验证（TASK-44）
+
+**研究问题**：当 Claude Code 通过 skill 激活路径加载 SKILL.md 时，`reference/` 目录下的文件是否也被自动注入上下文？
+
+**设计**：对 Exp-A/D 的 10 个 freshnessCheck fixture，比较两个 SKILL.md 变体：
+
+| 变体 | 内容 | 行数 |
+|---|---|---|
+| Variant A | 完整 Implementation 内嵌（等同 Exp-A V2） | 249 行 |
+| Variant B | Spec-only（≤40 行）；Step 4 判断准则移至 `reference/freshnessCheck-criteria.md` | 40 行 |
+
+**结果**：
+
+| 变体 | Haiku 准确率 | Delta |
+|---|---|---|
+| Variant A（inline） | **0.980** | — |
+| Variant B（spec-only，无 reference/ 注入） | 0.800 | **-18pp** |
+
+**假设判决**：
+- **H-ref CONFIRMED**：delta = 18pp ≥ 10pp 阈值，reference/ 未被可靠加载
+- **H-load REFUTED**：gap 远超 5pp 容忍带
+
+### 解释
+
+Skill 激活路径（Claude Code harness 注入 SKILL.md）只加载 SKILL.md 文件本身。`reference/` 目录下的文件不会自动注入上下文。没有 Step 4 判断准则，模型只能依赖抽象 Spec 推理，准确率下降 18pp——与 Exp-D 的 P-spec 结果（0.70）方向一致（Variant B=0.80 略高，因 Variant B Spec 节比 Exp-D P-spec 更完整）。
+
+### 架构建议
+
+**废除 knowledge-extractor 的 ≤40 行约束**。执行规格型内容（判断准则、分支决策逻辑）必须留在 SKILL.md 主体，不得推到 reference/。reference/ 目录仍可用于纯无关背景（历史数据、案例描述），但不能承载 load-bearing 内容。
+
+数据：`experiments/skill-quality/artifacts/analysis/exp-f-results.json`
+
+---
+
 ## 实验框架可复用性
 
 `experiments/skill-quality/` 基础设施（TASK-36）可直接支持 Exp-D/E：
