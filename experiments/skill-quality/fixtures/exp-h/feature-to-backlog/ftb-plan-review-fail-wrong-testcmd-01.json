@@ -1,0 +1,31 @@
+{
+  "id": "ftb-plan-review-fail-wrong-testcmd-01",
+  "skill": "feature-to-backlog",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "decisionPoint": "reviewPlan",
+  "specSection": "reviewPlan :: (Plan, Config) → Verdict\nreviewPlan(P, cfg) = {\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.tests),\n    assert: phase.dod[0] starts with cfg.testCmd,\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: P.acceptance[0] == cfg.testAll,\n  assert: ∀goal ∈ proposal.goals: coveredBy(goal, P.phases ∪ P.acceptance),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "config": {
+    "testCmd": "pytest -k",
+    "testAll": "pytest"
+  },
+  "plan": {
+    "phases": [
+      {
+        "title": "Add user model",
+        "tests": ["tests/test_user_model.py"],
+        "impl": ["src/models/user.py"],
+        "dod": ["make test", "flake8 src/"]
+      }
+    ],
+    "constraints": [],
+    "acceptance": ["pytest", "make lint"]
+  },
+  "ground_truth_rationale": "phase.dod[0] is 'make test' but cfg.testCmd is 'pytest -k'. The invariant phase.dod[0] starts with cfg.testCmd fails. Verdict must be NEEDS_REVISION.",
+  "answer": {
+    "verdict": "NEEDS_REVISION",
+    "failing_invariants": ["phase.dod[0] starts with cfg.testCmd"]
+  },
+  "answerType": "partial",
+  "fixtureClass": "CLEAR"
+}

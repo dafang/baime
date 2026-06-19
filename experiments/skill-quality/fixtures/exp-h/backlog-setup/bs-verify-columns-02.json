@@ -1,0 +1,15 @@
+{
+  "id": "bs-verify-columns-02",
+  "skill": "backlog-setup",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "decisionPoint": "verifyColumns",
+  "specSection": "REQUIRED_COLUMNS := [\"Proposal\", \"Plan\", \"Backlog\", \"Ready\", \"In Progress\", \"Done\", \"Needs Human\"]\nverifyColumns :: [String] → [String]\nverifyColumns(required) = required ∖ existingColumns()",
+  "state": {
+    "existingColumns": ["To Do", "In Progress", "Done"]
+  },
+  "ground_truth_rationale": "Default backlog columns are 'To Do', 'In Progress', 'Done'. Required columns minus existing = ['Proposal', 'Plan', 'Backlog', 'Ready', 'Needs Human']. Five columns are missing.",
+  "answer": ["Proposal", "Plan", "Backlog", "Ready", "Needs Human"],
+  "answerType": "set",
+  "fixtureClass": "CLEAR"
+}

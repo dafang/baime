@@ -1,0 +1,16 @@
+{
+  "id": "bs-seed-examples-02",
+  "skill": "backlog-setup",
+  "taskClass": "C",
+  "taskType": "branch-selection",
+  "decisionPoint": "seedExamples",
+  "specSection": "seedExamples :: () → ()\nseedExamples() =\n  | ¬empty(backlog/docs/) ∨ ¬empty(backlog/decisions/) → skip\n  | otherwise → {\n      backlog document create <onboardingDocTitle> --type guide,\n      backlog decision create  <templateDecisionTitle> --status \"Accepted\"\n    }",
+  "state": {
+    "backlogDocsEmpty": false,
+    "backlogDecisionsEmpty": true
+  },
+  "ground_truth_rationale": "backlog/docs/ is non-empty, so ¬empty(backlog/docs/) is true. The OR condition is satisfied, triggering the 'skip' branch. Seeding is idempotent: skip when any content exists.",
+  "answer": "SKIP",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR"
+}

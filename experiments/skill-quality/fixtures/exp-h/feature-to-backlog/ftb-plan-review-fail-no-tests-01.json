@@ -1,0 +1,31 @@
+{
+  "id": "ftb-plan-review-fail-no-tests-01",
+  "skill": "feature-to-backlog",
+  "taskClass": "B",
+  "taskType": "invariant-check",
+  "decisionPoint": "reviewPlan",
+  "specSection": "reviewPlan :: (Plan, Config) → Verdict\nreviewPlan(P, cfg) = {\n  ∀phase ∈ P.phases: {\n    assert: ¬empty(phase.tests),\n    assert: phase.dod[0] starts with cfg.testCmd,\n    assert: ∀cmd ∈ phase.dod: isShellCmd(cmd)\n  },\n  assert: P.acceptance[0] == cfg.testAll,\n  assert: ∀goal ∈ proposal.goals: coveredBy(goal, P.phases ∪ P.acceptance),\n  return: APPROVED | NEEDS_REVISION\n}",
+  "config": {
+    "testCmd": "npm test -- --run",
+    "testAll": "npm test"
+  },
+  "plan": {
+    "phases": [
+      {
+        "title": "Add database migration",
+        "tests": [],
+        "impl": ["src/db/migrations/001_add_users.sql"],
+        "dod": ["npm test -- --run", "psql -c 'SELECT 1'"]
+      }
+    ],
+    "constraints": [],
+    "acceptance": ["npm test"]
+  },
+  "ground_truth_rationale": "Phase has empty tests array, violating assert: ¬empty(phase.tests). TDD requires tests to exist in every phase. Verdict must be NEEDS_REVISION.",
+  "answer": {
+    "verdict": "NEEDS_REVISION",
+    "failing_invariants": ["¬empty(phase.tests)"]
+  },
+  "answerType": "partial",
+  "fixtureClass": "CLEAR"
+}

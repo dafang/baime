@@ -1,0 +1,15 @@
+{
+  "id": "ftb-entry-point-02",
+  "skill": "feature-to-backlog",
+  "taskClass": "C",
+  "taskType": "branch-selection",
+  "decisionPoint": "fromStatus",
+  "specSection": "fromStatus :: Status → EntryPoint\nfromStatus(\"Plan\") = PlanLoop\nfromStatus(_)      = ProposalLoop  -- Proposal or other",
+  "input": {
+    "taskStatus": "Proposal"
+  },
+  "ground_truth_rationale": "Status is 'Proposal', which matches the wildcard _ branch. fromStatus returns ProposalLoop for any status other than 'Plan'. This is clear and unambiguous.",
+  "answer": "ProposalLoop",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR"
+}

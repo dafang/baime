@@ -1,0 +1,15 @@
+{
+  "id": "bs-init-project-02",
+  "skill": "backlog-setup",
+  "taskClass": "A",
+  "taskType": "binary-gate",
+  "decisionPoint": "initProject",
+  "specSection": "initProject :: () → ()\ninitProject() =\n  | exists(\"backlog/\") → skip   -- already initialised\n  | otherwise          → backlog init <projectName> --defaults --agent-instructions none",
+  "state": {
+    "backlogDirExists": true
+  },
+  "ground_truth_rationale": "backlog/ directory already exists, so initProject takes the 'exists(backlog/)' branch and skips initialization. This is idempotent behavior — clear SKIP case.",
+  "answer": "SKIP",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR"
+}

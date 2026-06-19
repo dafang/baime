@@ -1,0 +1,16 @@
+{
+  "id": "bs-seed-examples-01",
+  "skill": "backlog-setup",
+  "taskClass": "C",
+  "taskType": "branch-selection",
+  "decisionPoint": "seedExamples",
+  "specSection": "seedExamples :: () → ()\nseedExamples() =\n  | ¬empty(backlog/docs/) ∨ ¬empty(backlog/decisions/) → skip\n  | otherwise → {\n      backlog document create <onboardingDocTitle> --type guide,\n      backlog decision create  <templateDecisionTitle> --status \"Accepted\"\n    }",
+  "state": {
+    "backlogDocsEmpty": true,
+    "backlogDecisionsEmpty": true
+  },
+  "ground_truth_rationale": "Both backlog/docs/ and backlog/decisions/ are empty. The condition ¬empty(backlog/docs/) ∨ ¬empty(backlog/decisions/) is false, so the 'otherwise' branch fires: seed the example document and decision.",
+  "answer": "SEED",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR"
+}
