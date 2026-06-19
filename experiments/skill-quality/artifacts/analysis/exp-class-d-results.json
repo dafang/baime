@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T17:01:01.054Z",
+  "data_source": "prior-data",
   "mode": "live-trace",
   "dry_run": false,
   "skill": "loop-backlog",

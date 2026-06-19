@@ -615,3 +615,71 @@ TASK-36（infrastructure）的产出被五个后续实验直接复用：
 ```
 
 每一步都比上一步代价更高。大多数情况下，问题在步骤 ①②③ 就能解决，到步骤 ④ 往往意味着任务本身不适合自动化（应为 `manual-review`）。
+
+---
+
+## 10. Provenance Gate（数据来源门控）
+
+### 10.1 背景：Exp-H 估计值事件
+
+Exp-H（验证 Layer 2.5 Oracle 阈值的跨 skill 泛化能力）最初被标记为 Done，但其结果实为分析估计值，并未发生真实的 LLM API 调用。σ=0.001 是一个数学假象——两个 skill 的得分均被锚定到同一组参考值，因此方差为零。
+
+原有 DoD 全部是字段存在性 grep 检查，无法区分"真实运行"与"手写 JSON"。Provenance Gate 就是为了让"实验未实际运行"在机械检查中直接失败，而非被错误标记为 Done。
+
+### 10.2 data_source 字段
+
+所有 `artifacts/analysis/*-results.json` 文件必须在顶层包含 `data_source` 字段，取值为以下三者之一：
+
+| 值 | 含义 |
+|---|---|
+| `measured` | 本次实验中产生了真实的 LLM API 响应，原始数据存放在 `artifacts/runs/` 下 |
+| `prior-data` | 分析基于已有实验的真实测量结果（跨实验复用） |
+| `estimated` | 数据来源于分析推导或估算，没有对应的 LLM 调用原始数据 |
+
+**关键约束**：`data_source: "estimated"` 的文件**不得**包含顶层 `hypothesis` 或 `verdict` 字段——估计值不能伪装成实验结论。
+
+### 10.3 使用 check-provenance.sh
+
+```bash
+# 扫描所有 artifacts/analysis/*-results.json（批量模式）
+bash experiments/skill-quality/scripts/check-provenance.sh
+
+# 检查单个文件，并额外执行 estimated 规则（单文件模式）
+bash experiments/skill-quality/scripts/check-provenance.sh path/to/result.json
+```
+
+脚本在以下情况退出非零：
+- 文件缺少 `data_source` 字段
+- `data_source` 不是三个合法值之一
+- 单文件模式下 `data_source=estimated` 且存在 `hypothesis` 或 `verdict` 字段
+
+### 10.4 使用 check-run-completeness.sh
+
+```bash
+# 验证某次实验下所有 fixture 运行结果的完整性
+bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/skill-quality/artifacts/runs/exp-h
+```
+
+脚本检查：
+- 每个 `result.json` 的 `responses` 数组非空
+- 每个 skill 下至少有 1 个 fixture 结果
+- 同一 skill 内所有 fixture 的 `responses` 长度一致（= k）
+
+若 runs 目录不存在或无 result.json 文件，脚本输出提示并以 0 退出（空集合视为通过）。
+
+### 10.5 Suspiciously-Low σ 警告
+
+`run-exp-h.ts` 在 σ < 0.005 时会：
+1. 在 results JSON 中添加 `"suspiciously_low": true` 字段
+2. 向 stderr 打印警告，提示检查 fixture 得分是否被锚定到同一参考值
+
+这一检查的触发条件在 `experiments/skill-quality/scripts/test-suspicious-sigma.sh` 中有完整的测试覆盖。
+
+### 10.6 新建实验的要求
+
+每次实验产出 results.json 时，必须：
+
+1. 设置正确的 `data_source`（不得遗漏）
+2. 若 `data_source=measured`：确保 `artifacts/runs/<exp-id>/` 下存有原始响应数据
+3. 若 `data_source=estimated`：不得添加 `hypothesis` 或 `verdict` 字段，且不得在 DoD 中将其标记为 CONFIRMED 状态
+4. 在 CI/DoD 中加入 `bash experiments/skill-quality/scripts/check-provenance.sh` 调用

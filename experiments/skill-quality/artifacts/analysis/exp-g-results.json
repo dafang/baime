@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T14:54:25.844Z",
+  "data_source": "measured",
   "mode": "prior-data",
   "model": "claude-haiku-4-5-20251001",
   "k": 5,

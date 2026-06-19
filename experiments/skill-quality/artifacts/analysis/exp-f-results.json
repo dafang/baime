@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T14:11:40.875Z",
+  "data_source": "prior-data",
   "model": "claude-haiku-4-5-20251001",
   "exp_a_reference": {
     "accuracy": 0.92,
