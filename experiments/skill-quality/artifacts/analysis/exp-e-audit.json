@@ -1,0 +1,81 @@
+{
+  "audited_at": "2026-06-19T12:00:00Z",
+  "auditor": "human (assisted by code review)",
+  "spec_reference": "reviewPlan :: Plan → Verdict with 5 invariants: ¬empty(phases), ¬empty(phase.instructions), ¬empty(phase.dod), isShellCmd(dod[i]), ¬empty(acceptance), isShellCmd(acceptance[i])",
+  "fixtures": [
+    {
+      "id": "review-approved-01",
+      "clarity": "CLEAR",
+      "reason": "All invariants clearly satisfied. Instructions non-empty, dod=['npx tsc --noEmit','npm test'] both unambiguous shell commands, acceptance=['bash scripts/validate-plugin.sh'] is a shell command.",
+      "ground_truth_verdict": "APPROVED",
+      "ground_truth_failing": []
+    },
+    {
+      "id": "review-approved-02",
+      "clarity": "CLEAR",
+      "reason": "Multi-phase plan. All phases have non-empty instructions and dod entries that are recognizable shell commands. acceptance entries are shell commands. APPROVED is unambiguous.",
+      "ground_truth_verdict": "APPROVED",
+      "ground_truth_failing": []
+    },
+    {
+      "id": "review-fail-empty-phases",
+      "clarity": "CLEAR",
+      "reason": "phases=[] is trivially ¬empty violation. NEEDS_REVISION and the single failing invariant are unambiguous.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["¬empty(phases)"]
+    },
+    {
+      "id": "review-fail-no-instructions",
+      "clarity": "CLEAR",
+      "reason": "instructions=\"\" is trivially empty. Violation is unambiguous.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["¬empty(phase.instructions)"]
+    },
+    {
+      "id": "review-fail-empty-dod",
+      "clarity": "CLEAR",
+      "reason": "dod=[] is trivially empty. Violation is unambiguous.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["¬empty(phase.dod)"]
+    },
+    {
+      "id": "review-fail-nl-dod",
+      "clarity": "AMBIGUOUS",
+      "reason": "dod=['make tests green']. 'make tests green' starts with 'make', a valid shell command. A model could reasonably parse this as a make invocation with two target names ('tests' and 'green'). The intent is natural language ('make the tests green') but the syntactic surface is shell-command-like. isShellCmd verdict is debatable.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["isShellCmd(dod[0])"]
+    },
+    {
+      "id": "review-fail-no-acceptance",
+      "clarity": "CLEAR",
+      "reason": "acceptance=[] is trivially empty. Violation is unambiguous.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["¬empty(acceptance)"]
+    },
+    {
+      "id": "review-fail-nl-acceptance",
+      "clarity": "AMBIGUOUS",
+      "reason": "acceptance=['confirm manually']. The violation itself is clear ('confirm manually' is prose, not a shell command). However, the failing_invariants notation 'isShellCmd(acceptance[0])' is non-standard — models must use this exact string for partial scoring. A model correctly identifying the issue but using different notation (e.g. 'isShellCmd(acceptance.confirm manually)' or '\\u00abishellCmd(acceptance[0])') scores 0 on the items component despite being semantically correct. This is a scoring brittleness issue that inflates apparent FN rate.",
+      "ground_truth_verdict": "NEEDS_REVISION",
+      "ground_truth_failing": ["isShellCmd(acceptance[0])"]
+    }
+  ],
+  "summary": {
+    "CLEAR": 6,
+    "AMBIGUOUS": 2,
+    "ERROR": 0,
+    "total": 8,
+    "clear_fixture_ids": [
+      "review-approved-01",
+      "review-approved-02",
+      "review-fail-empty-phases",
+      "review-fail-no-instructions",
+      "review-fail-empty-dod",
+      "review-fail-no-acceptance"
+    ],
+    "ambiguous_fixture_ids": [
+      "review-fail-nl-dod",
+      "review-fail-nl-acceptance"
+    ]
+  }
+}

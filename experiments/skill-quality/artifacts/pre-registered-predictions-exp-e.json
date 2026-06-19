@@ -1,0 +1,19 @@
+{
+  "frozen_at": "2026-06-19T12:00:00Z",
+  "experiment": "exp-e-class-b-audit-recalibration",
+  "registered_before_llm_calls": true,
+  "hypotheses": [
+    {
+      "id": "H-fixture-noise",
+      "claim": ">=2 Class B fixtures are AMBIGUOUS/ERROR",
+      "threshold": 2,
+      "verdict": "PENDING"
+    },
+    {
+      "id": "H-sonnet-gap",
+      "claim": "Sonnet Class B accuracy >= Haiku + 10pp on CLEAR fixtures",
+      "threshold_pp": 10,
+      "verdict": "PENDING"
+    }
+  ]
+}
