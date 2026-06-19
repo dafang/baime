@@ -1,10 +1,10 @@
 ---
 id: TASK-43
 title: '为方法论主张增加 evidence/[unvalidated] meta-lint'
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-19 12:26'
-updated_date: '2026-06-19 12:41'
+updated_date: '2026-06-19 12:45'
 labels:
   - baime
   - validate-plugin
@@ -16,7 +16,7 @@ references:
   - scripts/validate-plugin.sh
   - plugin/skills/methodology-bootstrapping/SKILL.md
 priority: medium
-ordinal: 25000
+ordinal: 1000
 ---
 
 ## Description
