@@ -9,7 +9,8 @@
     "exp-b": "npx tsx scripts/run-exp-b.ts",
     "oracle-class-c": "npx tsx scripts/run-oracle-class-c.ts",
     "exp-d": "npx tsx scripts/run-exp-d.ts",
-    "exp-e": "npx tsx scripts/run-exp-e.ts"
+    "exp-e": "npx tsx scripts/run-exp-e.ts",
+    "exp-f": "npx tsx exp-f/run-exp-f.ts"
   },
   "devDependencies": {
     "dotenv": "^16.6.1",

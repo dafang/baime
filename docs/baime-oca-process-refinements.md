@@ -21,6 +21,8 @@ Exp-A 证明 task-from-template 的 `## Implementation`（Step 4 判断准则）
 
 **根本问题**：≤40 行约束把执行规格型内容（load-bearing）和无关背景（noise）混为一谈，要求一起推到 `reference/`——但 `reference/` 在 Claude Code skill 激活路径中是否可靠加载从未被验证（见 Exp-F）。
 
+**Exp-F 结论（H-ref CONFIRMED，2026-06-19）**：Variant A（全 Implementation 内嵌，249 行）vs Variant B（spec-only ≤40 行，reference/ 不注入）准确率差距 **18pp**（0.980 vs 0.800），远超 10pp 阈值。这证实：Claude Code skill 激活路径仅注入 SKILL.md 内容，**reference/ 目录文件不会被自动加载到上下文**。把 load-bearing 内容推到 reference/ 等于主动放弃 18pp 准确率。**≤40 行约束应废除**。
+
 ### 已修订
 
 `knowledge-extractor.md` 已将约束拆分为：
@@ -124,7 +126,7 @@ skill-name/
 
 | 实验 | 核心问题 | 决策影响 |
 |---|---|---|
-| **Exp-F** | `reference/` 在 Claude Code skill 激活路径中是否可靠加载？ | 直接决定 ≤40 行修订是否充分，或是否需要更强的加载机制 |
+| **Exp-F** ✅ | `reference/` 在 Claude Code skill 激活路径中是否可靠加载？ | **H-ref CONFIRMED**：18pp 差距，废除 ≤40 行约束；执行规格必须留在 SKILL.md |
 | **Exp-G** | 自评 V_instance 相对行为准确率的膨胀度是多少？ | 决定第 5/9 步收敛判据是否必须行为化替代 |
 | **Exp-H** | Layer 2.5 oracle 阈值能否跨 skill 通用？ | 决定发行门是 per-skill 标定还是全局阈值 |
 

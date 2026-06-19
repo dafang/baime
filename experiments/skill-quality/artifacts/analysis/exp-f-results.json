@@ -1,0 +1,138 @@
+{
+  "generated": "2026-06-19T14:11:40.875Z",
+  "model": "claude-haiku-4-5-20251001",
+  "exp_a_reference": {
+    "accuracy": 0.92,
+    "variant": "full-implementation"
+  },
+  "exp_d_p_spec_reference": {
+    "accuracy": 0.7,
+    "variant": "spec-only"
+  },
+  "variant_a_accuracy": 0.98,
+  "variant_b_accuracy": 0.8,
+  "delta_pp": 0.18,
+  "per_fixture": {
+    "variant-a": [
+      {
+        "fixtureId": "tft-fresh-01",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-02",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-03",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-04",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-05",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-01",
+        "groundTruth": "STALE",
+        "meanScore": 0.8
+      },
+      {
+        "fixtureId": "tft-stale-02",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-03",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-04",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-05",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      }
+    ],
+    "variant-b": [
+      {
+        "fixtureId": "tft-fresh-01",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-02",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-03",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-04",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-fresh-05",
+        "groundTruth": "FRESH",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-01",
+        "groundTruth": "STALE",
+        "meanScore": 0
+      },
+      {
+        "fixtureId": "tft-stale-02",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-03",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-04",
+        "groundTruth": "STALE",
+        "meanScore": 1
+      },
+      {
+        "fixtureId": "tft-stale-05",
+        "groundTruth": "STALE",
+        "meanScore": 0
+      }
+    ]
+  },
+  "hypotheses": {
+    "H-ref": {
+      "description": "variant_b_accuracy < variant_a_accuracy - 10pp (reference/ not auto-loaded)",
+      "verdict": "CONFIRMED",
+      "delta_observed": 0.18000000000000005,
+      "threshold": 0.1
+    },
+    "H-load": {
+      "description": "variant_b_accuracy >= variant_a_accuracy - 5pp (reference/ load effective)",
+      "verdict": "REFUTED",
+      "delta_observed": 0.18000000000000005,
+      "threshold": 0.05
+    }
+  },
+  "hypothesis": "H-ref CONFIRMED",
+  "interpretation": "reference/ content NOT loaded by skill activation: 18pp drop without it. Recommendation: abolish ≤40-line constraint; keep implementation in SKILL.md.",
+  "architecture_recommendation": "Abolish ≤40-line constraint. Implementation content must stay in SKILL.md."
+}
