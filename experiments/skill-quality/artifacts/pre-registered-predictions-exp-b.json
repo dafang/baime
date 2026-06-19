@@ -1,0 +1,34 @@
+{
+  "frozen_at": "2026-06-19T10:15:00Z",
+  "experiment": "exp-b-oracle-calibration",
+  "hypotheses": {
+    "H-oracle-A": {
+      "model": "claude-haiku-4-5-20251001",
+      "taskClass": "A",
+      "threshold": 0.85,
+      "test": "haiku mean F1 across 10 Class A fixtures ≥ 0.85",
+      "verdict": "PENDING"
+    },
+    "H-oracle-B": {
+      "model": "claude-haiku-4-5-20251001",
+      "taskClass": "B",
+      "threshold": 0.70,
+      "test": "haiku mean partial-F1 across 8 Class B fixtures ≥ 0.70",
+      "verdict": "PENDING"
+    },
+    "H-oracle-C": {
+      "model": "claude-haiku-4-5-20251001",
+      "taskClass": "C",
+      "threshold": 0.80,
+      "test": "haiku mean F1 across 6 Class C fixtures ≥ 0.80",
+      "verdict": "PENDING"
+    }
+  },
+  "models": {
+    "primary": "claude-haiku-4-5-20251001",
+    "secondary": "glm-4.5-flash",
+    "upper_bound": "claude-sonnet-4-6"
+  },
+  "k": 5,
+  "total_calls": 360
+}
