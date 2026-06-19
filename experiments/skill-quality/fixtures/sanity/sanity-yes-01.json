@@ -1,0 +1,16 @@
+{
+  "id": "sanity-yes-01",
+  "skill": "backlog-setup",
+  "taskClass": "A",
+  "taskType": "binary-gate",
+  "decisionPoint": "checkEnabled",
+  "specSection": "checkEnabled :: Config → YesNo\ncheckEnabled(cfg) =\n  | cfg.enabled = true  → YES\n  | cfg.enabled = false → NO\n\n-- Answer vocabulary: YES or NO",
+  "input": {
+    "enabled": true
+  },
+  "ground_truth_rationale": "Trivially obvious: cfg.enabled is true, so the answer is YES. Any competent model should answer this correctly. Used as harness health check (negative control / sanity fixture).",
+  "answer": "YES",
+  "answerType": "exact",
+  "fixtureClass": "CLEAR",
+  "_sanity_note": "HARNESS HEALTH CHECK: if this fixture fails, the harness itself is broken, not the skill."
+}

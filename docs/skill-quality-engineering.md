@@ -683,3 +683,83 @@ bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/ski
 2. 若 `data_source=measured`：确保 `artifacts/runs/<exp-id>/` 下存有原始响应数据
 3. 若 `data_source=estimated`：不得添加 `hypothesis` 或 `verdict` 字段，且不得在 DoD 中将其标记为 CONFIRMED 状态
 4. 在 CI/DoD 中加入 `bash experiments/skill-quality/scripts/check-provenance.sh` 调用
+
+---
+
+## 11. 机械质量门：Fixture Lint / 注入自检 / 负控制
+
+### 背景：Exp-H Class A 假阴性事件
+
+在 Exp-H 首次真实测试中，Class A 准确率全为 0。根因分析发现两个并发故障：
+
+1. **Fixture 词汇缺失**：backlog-setup 的 fixture 答案标签（`init`、`skip`、`seed`）未出现在 `specSection` 文本中，导致模型无法从 spec 中推断正确答案。
+2. **Harness 字段静默丢弃**：`buildPromptExact` 早期版本只注入 `fixture.input`，`state` 字段被忽略，模型缺少做判断所需的环境状态。
+
+修复后（在 `specSection` 中补充答案词汇，并在 `buildPromptExact` 中注入 `state`），Class A 升至 0.867/1.0，阈值实际成立。
+
+为防止类似问题再次出现，建立以下三道机械质量门。
+
+### 11.1 Quality Gate 1 — Fixture Lint
+
+**脚本**: `experiments/skill-quality/scripts/fixture-lint.sh`
+
+**作用**: 对每个 `answerType: "exact"` 的 fixture，验证 `answer` 值（不区分大小写）出现在 `specSection` 文本中。若 fixture 有显式 `answer_vocab` 数组，则改为验证 answer 在该数组内。
+
+**用法**:
+
+```bash
+# 对特定实验的 fixture 目录运行
+bash experiments/skill-quality/scripts/fixture-lint.sh experiments/skill-quality/fixtures/exp-h
+
+# 对单个技能目录运行
+bash experiments/skill-quality/scripts/fixture-lint.sh experiments/skill-quality/fixtures/exp-h/backlog-setup
+```
+
+**退出码**: 所有 exact fixture 通过 → exit 0；任何 fixture 不通过 → exit 非零，并打印失败的 fixture id。
+
+**回归测试**: `bash experiments/skill-quality/scripts/test-fixture-lint.sh`（包含合格/不合格 fixture 的自动测试，以及对 exp-h 真实 fixture 的回归验证）。
+
+### 11.2 Quality Gate 2 — Harness 字段注入自检
+
+**脚本**: `experiments/skill-quality/scripts/test-harness-injection.sh`
+
+**作用**: 使用内联 Node.js 脚本验证注入检测逻辑能正确识别 `state` 字段被遗漏的情况。场景：fixture 含 `state: {backlogDirExists: false}`，"坏" builder 只使用 `fixture.input`——检查器应报告错误。
+
+**用法**:
+
+```bash
+bash experiments/skill-quality/scripts/test-harness-injection.sh
+```
+
+**在运行时**: `run-exp-h.ts` 中的 `assertPromptInjectsFields()` 函数会在每个 fixture 构建 prompt 后立即断言：若 fixture 存在 `state`/`input`/`plan`/`config` 字段，prompt 中必须包含这些字段的键名。断言失败则抛出错误，实验终止。
+
+### 11.3 Quality Gate 3 — 负控制（Sanity Fixtures）
+
+**目录**: `experiments/skill-quality/fixtures/sanity/`
+
+**作用**: 存放 1-2 个极其简单的 fixture，任何能力正常的模型都应该能答对。在真实实验前运行这些 fixture 作为 harness 健康检查（负控制）。如果全部 sanity fixture 都失败，说明 harness 本身有问题，不是 skill 有问题。
+
+**触发逻辑**（`run-exp-h.ts` 中的 `runSanityCheck()`）:
+
+- 若 `fixtures/sanity/` 目录存在，在主实验前运行所有 sanity fixture
+- 若所有 sanity fixture 都失败 → 打印 `HARNESS FAULT DETECTED` 并 exit 非零
+- 部分通过 → 打印警告，继续主实验
+
+**用法**: 作为 `run-exp-h.ts` 的前置检查自动运行，无需单独调用。
+
+### 11.4 三道质量门的使用顺序
+
+新建实验或修改 fixture 时，按以下顺序运行：
+
+```bash
+# 1. Fixture lint — 确保答案在 spec 词汇内
+bash experiments/skill-quality/scripts/fixture-lint.sh experiments/skill-quality/fixtures/<exp-id>
+
+# 2. 注入自检 — 确保 harness 检测逻辑正常
+bash experiments/skill-quality/scripts/test-harness-injection.sh
+
+# 3. Fixture lint 回归测试
+bash experiments/skill-quality/scripts/test-fixture-lint.sh
+```
+
+运行真实实验时（如 `run-exp-h.ts`），harness 会自动执行 negative control 检查和字段注入断言。
