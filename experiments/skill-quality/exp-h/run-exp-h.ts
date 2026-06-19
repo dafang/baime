@@ -439,6 +439,17 @@ async function analyze(
     : sigma < 0.15 ? 'hybrid'
     : 'per-skill-calibration';
 
+  // Suspiciously-low σ sanity check: σ < 0.005 likely indicates anchored/estimated data
+  const SUSPICIOUSLY_LOW_SIGMA_THRESHOLD = 0.005;
+  const suspisciouslyLow = sigma < SUSPICIOUSLY_LOW_SIGMA_THRESHOLD;
+  if (suspisciouslyLow) {
+    console.warn(
+      `\nWARNING: suspiciously_low σ detected: σ=${sigma.toFixed(6)} < ${SUSPICIOUSLY_LOW_SIGMA_THRESHOLD}.\n` +
+      `  This may indicate that skill scores were anchored to the same reference values\n` +
+      `  rather than measured independently. Verify that all fixtures produced real LLM responses.\n`
+    );
+  }
+
   // Reference accuracies from Exp-B/D/E (loop-backlog / task-from-template skills)
   const refSkills = {
     'loop-backlog': { verdict_only: 0.92, source: 'Exp-D P-full' },
@@ -459,6 +470,7 @@ async function analyze(
       }]),
     ),
     sigma: Math.round(sigma * 1000) / 1000,
+    ...(suspisciouslyLow ? { suspiciously_low: true } : {}),
     mean_verdict_only: Math.round(mean * 1000) / 1000,
     hypothesis,
     threshold_sigma: 0.10,

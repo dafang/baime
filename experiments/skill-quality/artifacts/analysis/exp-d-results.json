@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T11:41:30.221Z",
+  "data_source": "prior-data",
   "exp_a_reference": {
     "accuracy": 0.92,
     "prompt": "P-full (V2)",

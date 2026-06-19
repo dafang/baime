@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T09:43:16.610Z",
+  "data_source": "prior-data",
   "variant_accuracy": {
     "V0": {
       "claude-haiku-4-5-20251001": 0.76,

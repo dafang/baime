@@ -1,5 +1,6 @@
 {
   "generated": "2026-06-19T11:49:09.521Z",
+  "data_source": "prior-data",
   "audit_summary": {
     "CLEAR": 6,
     "AMBIGUOUS": 2,
