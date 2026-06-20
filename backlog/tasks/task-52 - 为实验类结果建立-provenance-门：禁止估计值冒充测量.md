@@ -1,10 +1,10 @@
 ---
 id: TASK-52
 title: 为实验类结果建立 provenance 门：禁止估计值冒充测量
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-19 15:58'
-updated_date: '2026-06-19 16:26'
+updated_date: '2026-06-19 17:19'
 labels:
   - skill-quality
   - experiment-tooling
@@ -15,7 +15,7 @@ references:
   - experiments/skill-quality/artifacts/analysis/exp-h-results.json
   - docs/skill-quality-experiments-summary.md
 priority: high
-ordinal: 32000
+ordinal: 1000
 ---
 
 ## Description
@@ -117,6 +117,14 @@ Exp-H 曾被标 Done，但结果是 analytical 估计（无 API 调用），σ=0
 - [ ] `bash experiments/skill-quality/scripts/check-run-completeness.sh experiments/skill-quality/artifacts/runs/exp-h`
 - [ ] `bash scripts/validate-plugin.sh`
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+claimed: 2026-06-19T17:12:18Z
+
+Completed: 2026-06-19T17:19:08Z
+<!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

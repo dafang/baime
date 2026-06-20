@@ -1,10 +1,10 @@
 ---
 id: TASK-53
 title: Fixture 质量 lint + harness 字段注入自检 + 负控制
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-19 15:58'
-updated_date: '2026-06-19 16:26'
+updated_date: '2026-06-19 23:12'
 labels:
   - skill-quality
   - experiment-tooling
@@ -15,7 +15,7 @@ references:
   - experiments/skill-quality/fixtures/exp-h/
   - experiments/skill-quality/lib/score.ts
 priority: high
-ordinal: 33000
+ordinal: 1000
 ---
 
 ## Description
@@ -108,6 +108,14 @@ Exp-H 首次真测 Class A 全 0，根因是 fixture 答案标签不在 spec 词
 - [ ] `bash experiments/skill-quality/scripts/test-fixture-lint.sh`
 - [ ] `bash scripts/validate-plugin.sh`
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+claimed: 2026-06-19T23:06:22Z
+
+Completed: 2026-06-19T23:12:45Z
+<!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
