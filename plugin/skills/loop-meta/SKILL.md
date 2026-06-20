@@ -31,6 +31,8 @@ contracts:
     target: self
   - grep: "budget exhausted"
     target: self
+  - grep: "### draftDecomposition"
+    target: self
   - grep: "metaWorkerLoop"
     target: self
   - grep: "Monitor(persistent=true"
@@ -39,6 +41,28 @@ contracts:
     target: self
   - grep: "catchUpScan"
     target: self
+  - grep: "tail -f -n 0"
+    target: self
+  - grep: "children already exist"
+    target: self
+  - grep: "setReady.*unconditional"
+    target: self
+  - grep: "### createSubTask"
+    target: self
+  - grep: "verifySubTaskDod"
+    target: self
+  - not-grep: "backlog task create --title \"\\$TITLE\""
+    target: self
+  - grep: "Definition of Done"
+    target: scripts/verify-subtask-dod.sh
+  - grep: "GRACE_POLLS"
+    target: scripts/loop-backlog-daemon.js
+  - grep: "wipAbsentCount"
+    target: scripts/loop-backlog-daemon.js
+  - grep: "computeWip"
+    target: scripts/loop-backlog-daemon.js
+  - grep: "wipNotified"
+    target: scripts/loop-backlog-daemon.js
 ---
 
 λ() → metaWorkerLoop()
@@ -59,7 +83,7 @@ metaWorkerLoop() = {
   _:  catchUpScan(),
   loop:
     if (stopSentinel()): return Stopped,
-    event: Monitor(persistent=true, command="tail -f DAEMON_LOG"),
+    event: Monitor(persistent=true, command="tail -f -n 0 DAEMON_LOG"),
     | stopSentinel()                → return Stopped
     | event matches "meta-ready:*" → metaLoop(extractId(event)); loop
     | otherwise                    → loop   -- ignore task-ready: and noise
@@ -128,12 +152,19 @@ reviewLoop(id, doc, maxIter) = {
 }
 
 -- draftDecomposition: for Meta-Plan tasks, call decomposer subagent to produce
--- the canonical desired sub-task list, then reconcile. Pauses for human review
--- before activating (status stays Meta-Plan until human sets Meta-Active).
+-- the canonical desired sub-task list, create each as a Backlog child task,
+-- then gate for human review before activating (status stays Meta-Plan until
+-- human sets Meta-Active).
 draftDecomposition :: TaskId → Outcome
 draftDecomposition(id) = {
+  -- Idempotency guard: skip creation if children already exist
+  if (¬empty(listChildren(id))):
+    appendNote(id, "draftDecomposition: children already exist — skipping creation"),
+    return: Proposed,
+
   plan:  readField(id, "implementationPlan"),
   subs:  decomposer(id, plan),
+  _:     ∀t ∈ subs: createSubTask(id, t),   -- create all children in Backlog status
   _:     appendNote(id, "Decomposition complete: " + length(subs) + " sub-tasks in Backlog. "
                      + "Review sub-tasks, then set status → Meta-Active to start reconcile loop."),
   return: Proposed
@@ -186,13 +217,29 @@ listChildren(id) =
   filter(t → hasNote(t, "parentTask: " + id), allTasks())
 
 -- createSubTask: create a new backlog task in Backlog status with parentTask link.
--- Delegates to task-to-backlog or feature-to-backlog for DoD shell-gate generation.
+-- MUST delegate to task-to-backlog (or feature-to-backlog) so the child carries a
+-- shell-gate Definition of Done. A child created by a bare `backlog task create
+-- --title` (no DoD) is FORBIDDEN: loop-backlog cannot verifyDod it, so it can be
+-- rubber-stamped Done without the work being done (TASK-93 post-mortem, root cause R1).
+-- After creation, verifySubTaskDod asserts the DoD shell-gate is present; if absent,
+-- the child is reset and the meta-task escalates rather than proceeding with an
+-- unverifiable sub-task.
 createSubTask :: (TaskId, SubTaskSpec) → ()
 createSubTask(parent, spec) = {
-  child: invoke("task-to-backlog", spec),
+  child: invoke("task-to-backlog", spec),   -- produces ## Definition of Done with ≥1 shell-gate
   appendNote(child, "parentTask: " + parent),
-  setStatus(child, "Backlog")
+  setParentTaskId(child, parent),           -- frontmatter parent_task_id for daemon/listChildren
+  setStatus(child, "Backlog"),
+  assert: hasDod(child)                      -- enforced by verify-subtask-dod.sh — no DoD-less children
 }
+
+-- verifySubTaskDod: gate run after decomposition/reconcile. Asserts every child of
+-- the meta-task carries a Definition of Done shell-gate (scripts/verify-subtask-dod.sh).
+-- Exit 1 (DoD-less child found) → escalate; never allow a rubber-stampable child to
+-- enter the Ready lane.
+verifySubTaskDod :: TaskId → Bool
+verifySubTaskDod(id) =
+  shell("bash scripts/verify-subtask-dod.sh " + id) == 0
 
 -- escalation conditions
 noProgress :: TaskId → Bool
@@ -348,7 +395,8 @@ metaWorkerLoop() {
   [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
 
   # 4. Block on daemon log; dispatch meta-ready events, ignore everything else
-  Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
+  Monitor(persistent=true, command="tail -f -n 0 \"$DAEMON_LOG\"")
+  # -n 0: start from EOF, only follow NEW lines — prevents replaying history on restart
   # For each output line from Monitor:
   #   - Matches meta-ready:TASK-N  → metaLoop "$TASK_ID"
   #   - Stop sentinel present      → exit 0
@@ -378,6 +426,131 @@ catchUpScan() {
 }
 ```
 
+### draftDecomposition
+
+Runs the decomposer subagent, then creates each sub-task as a Backlog child task
+with a `parentTask:` note linking it back to the meta-task. Finally appends a
+human-review gate note; status stays Meta-Plan until the human sets Meta-Active.
+
+```bash
+draftDecomposition() {
+  local META_ID="$1"
+  local STOP_FILE="${REPO_ROOT}/backlog/.loop-stop"
+  local META_STOP_FILE="${REPO_ROOT}/backlog/.loop-meta-stop"
+
+  # 0. Idempotency guard: skip if children already exist
+  EXISTING=$(backlog task list --plain | grep -oP 'TASK-\d+' | while read -r TID; do
+    backlog task view "$TID" --plain | grep -q "parentTask: ${META_ID}" && echo "$TID"
+  done | wc -l)
+  if [ "$EXISTING" -gt 0 ]; then
+    backlog task edit "$META_ID" --append-notes \
+      "draftDecomposition: children already exist (${EXISTING}) — skipping creation"
+    return 0
+  fi
+
+  # 1. Run decomposer — returns one sub-task title per line
+  TITLES=$(callDecomposer "$META_ID")
+
+  if [ -z "$(echo "$TITLES" | xargs)" ]; then
+    backlog task edit "$META_ID" --append-notes \
+      "draftDecomposition: decomposer returned empty list — no sub-tasks created"
+    return 1
+  fi
+
+  # 2. Create each sub-task via createSubTask (task-to-backlog → shell-gate DoD)
+  COUNT=0
+  while IFS= read -r TITLE; do
+    [ -z "$TITLE" ] && continue
+    [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
+    NEW_ID=$(createSubTask "$META_ID" "$TITLE")
+    [ -n "$NEW_ID" ] && COUNT=$((COUNT + 1))
+  done <<< "$TITLES"
+
+  # 3. DoD gate: every child MUST carry a shell-gate DoD (R1 — no rubber-stampable children)
+  if ! verifySubTaskDod "$META_ID"; then
+    backlog task edit "$META_ID" --status "Needs Human" --append-notes \
+      "Escalated: draftDecomposition produced DoD-less sub-task(s). \
+See verify-subtask-dod.sh output. Fix sub-task DoD before setting Meta-Active."
+    return 1
+  fi
+
+  # 4. Human-review gate note — status stays Meta-Plan
+  backlog task edit "$META_ID" --append-notes \
+    "Decomposition complete: ${COUNT} sub-tasks in Backlog (all carry shell-gate DoD). Review sub-tasks, then set status → Meta-Active to start reconcile loop."
+}
+```
+
+### createSubTask
+
+Creates one child sub-task by invoking the `task-to-backlog` skill via an Agent, so the
+child ends in `Backlog` status **with a full Implementation Plan and `## Definition of Done`
+shell-gate**. A bare `backlog task create --title` (no DoD, no plan) is forbidden here —
+it produces an unverifiable, content-free child that loop-backlog can rubber-stamp Done
+(TASK-93 root cause R1). The child is linked to its parent both by a `parentTask:` note
+and by the `parent_task_id:` frontmatter field that the daemon and `listChildren` rely on.
+
+The agent prompt must supply:
+- `TITLE` — the sub-task title
+- `DESCRIPTION` — full context: what this sub-task is, why it exists, what it must achieve
+- `PARENT_CONTEXT` — the parent meta-task's implementation plan excerpt relevant to this sub-task
+
+This three-field prompt gives task-to-backlog enough context to draft a high-quality
+multi-phase plan with specific shell-gate DoD items, without needing human interaction.
+
+```bash
+createSubTask() {
+  local META_ID="$1"
+  local TITLE="$2"
+  local DESCRIPTION="$3"       # full context for this sub-task
+  local PARENT_CONTEXT="$4"    # relevant excerpt from the meta-task's implementation plan
+
+  # Invoke task-to-backlog via Agent — produces Backlog task with plan + shell-gate DoD.
+  # FORBIDDEN: a bare title-only create with no plan/DoD (rubber-stampable child).
+  NEW_ID=$(Agent(run_in_background=false, prompt="$(cat <<SUBTASK_EOF
+You are creating a backlog sub-task for the meta-task ${META_ID}.
+
+Use the Skill tool to invoke /task-to-backlog with the description below as the argument.
+task-to-backlog will create a properly-formed Backlog task with a multi-phase
+Implementation Plan and shell-verifiable DoD items. Do not skip the skill.
+
+After task-to-backlog completes:
+  1. Append a note line exactly: parentTask: ${META_ID}
+  2. Confirm the YAML frontmatter field parent_task_id: ${META_ID} is set
+     (task-to-backlog sets this if you pass --parent, otherwise edit it manually)
+Output ONLY the created task id (e.g. TASK-123) as the last line.
+
+--- Sub-task description ---
+Title: ${TITLE}
+
+${DESCRIPTION}
+
+--- Parent meta-task context ---
+${PARENT_CONTEXT}
+SUBTASK_EOF
+  )" | grep -oP 'TASK-\d+(\.\d+)*' | tail -1)
+
+  if [ -z "$NEW_ID" ]; then
+    backlog task edit "$META_ID" --append-notes "createSubTask: FAILED to create child for '${TITLE}'"
+    return 1
+  fi
+  echo "$NEW_ID"
+}
+```
+
+### verifySubTaskDod
+
+Runs `scripts/verify-subtask-dod.sh <META_ID>` — the R1 guard. Exit 0 iff every
+child of the meta-task carries a `## Definition of Done` with ≥1 checkbox shell-gate.
+Both `draftDecomposition` and `idempotentReconcile` call this before promoting any
+child to Ready, so a DoD-less (rubber-stampable) child can never enter the work lane.
+
+```bash
+verifySubTaskDod() {
+  local META_ID="$1"
+  bash scripts/verify-subtask-dod.sh "$META_ID"
+}
+```
+
 ### idempotentReconcile
 
 ```bash
@@ -387,14 +560,13 @@ idempotentReconcile() {
   # 1. Get desired sub-tasks from decomposer (list of titles, one per line)
   DESIRED=$(callDecomposer "$META_ID")
 
-  # 2. Get actual sub-tasks: scan notes for "parentTask: META_ID"
+  # 2. Get actual sub-tasks: scan for children with parent_task_id: META_ID
   ACTUAL=$(backlog task list --plain \
-    | grep -oP 'TASK-\d+' \
+    | grep -oP 'TASK-\d+(\.\d+)*' \
     | while read TID; do
-        backlog task view "$TID" --plain \
-          | grep -q "parentTask: ${META_ID}" && \
-          backlog task view "$TID" --plain \
-            | grep -oP '(?<=Task TASK-\d+ - ).+' | head -1
+        NOTE=$(backlog task view "$TID" --plain)
+        echo "$NOTE" | grep -qiP "parent.task.id:\s*${META_ID}" && \
+          echo "$NOTE" | grep -oP '(?<=Task TASK-[\d.]+ - ).+' | head -1
       done)
 
   # 3. Compute gap: desired titles not in actual
@@ -409,21 +581,30 @@ idempotentReconcile() {
   if [ -z "$(echo -e "$GAP" | xargs)" ]; then
     backlog task edit "$META_ID" --append-notes \
       "idempotentReconcile: no gap — all sub-tasks present"
-    return 0
+  else
+    # 4. Create missing sub-tasks via createSubTask (task-to-backlog → shell-gate DoD)
+    COUNT=0
+    while IFS= read -r TITLE; do
+      [ -z "$TITLE" ] && continue
+      NEW_ID=$(createSubTask "$META_ID" "$TITLE")
+      [ -n "$NEW_ID" ] && COUNT=$((COUNT + 1))
+    done <<< "$(echo -e "$GAP")"
+    backlog task edit "$META_ID" --append-notes \
+      "idempotentReconcile: created ${COUNT} sub-task(s)"
   fi
 
-  # 4. Create missing sub-tasks
-  COUNT=0
-  while IFS= read -r TITLE; do
-    [ -z "$TITLE" ] && continue
-    NEW_ID=$(backlog task create --title "$TITLE" --status "Backlog" --plain \
-      | grep -oP 'TASK-\d+' | head -1)
-    backlog task edit "$NEW_ID" --append-notes "parentTask: ${META_ID}"
-    COUNT=$((COUNT + 1))
-  done <<< "$(echo -e "$GAP")"
+  # R1 DoD gate: refuse to promote a DoD-less (rubber-stampable) child to Ready.
+  # Must pass before setReady — a child with no shell-gate cannot be verified by loop-backlog.
+  if ! verifySubTaskDod "$META_ID"; then
+    backlog task edit "$META_ID" --status "Needs Human" --append-notes \
+      "Escalated: idempotentReconcile found DoD-less sub-task(s) — see verify-subtask-dod.sh. \
+Not promoting to Ready until every child carries a shell-gate DoD."
+    return 1
+  fi
 
-  backlog task edit "$META_ID" --append-notes \
-    "idempotentReconcile: created ${COUNT} sub-task(s)"
+  # Fix-A: always call setReady — unconditional; must compute fresh wip via
+  # listChildren, NEVER assume wip from prior context.
+  setReady "$META_ID"  # unconditional — promotes Backlog→Ready up to WIP_CAP
 }
 ```
 

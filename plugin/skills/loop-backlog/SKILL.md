@@ -300,7 +300,7 @@ dependency needed.
 
 ```bash
 DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.js"
-DAEMON_VERSION="v4"
+DAEMON_VERSION="v5"
 
 NEED_WRITE=true
 if [ -f "$DAEMON_SCRIPT" ]; then
@@ -312,13 +312,13 @@ if [ "$NEED_WRITE" = "true" ]; then
   mkdir -p "${REPO_ROOT}/scripts"
   cat > "$DAEMON_SCRIPT" << 'DAEMON_EOF'
 #!/usr/bin/env node
-// daemon-version: v4
+// daemon-version: v5
 /**
  * loop-backlog-daemon.js — polls backlog tasks dir and emits task-ready events to stdout.
  *
  * Emits one line per Ready transition:      "task-ready:TASK-N"
  * Emits one line per Meta-ready transition: "meta-ready:TASK-N"
- * Meta-lane tasks (Meta-Proposal, Meta-Plan) are excluded from task-ready.
+ * Meta-lane tasks (Meta-Proposal, Meta-Plan, Meta-Active) are excluded from task-ready.
  * Stops on stop-sentinel file or SIGTERM. Does NOT self-terminate on parent PID death
  * (parent is a transient Bash shell; lifecycle is managed by sentinel and nohup/disown).
  *
@@ -368,7 +368,7 @@ const META_STATUSES = new Set([
   'meta-proposal', 'meta-plan', 'meta-active', 'meta-done',
 ]);
 
-const META_READY_STATUSES = new Set(['meta-proposal', 'meta-plan']);
+const META_READY_STATUSES = new Set(['meta-proposal', 'meta-plan', 'meta-active']);
 
 function readStatus(filepath) {
   try {
@@ -405,13 +405,15 @@ function scanReadyIds(tasksDir) {
 }
 
 function scanMetaReadyIds(tasksDir) {
-  const ready = new Set();
+  const ready = new Map();
   let entries;
   try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue;
     const id = parseTaskId(entry);
-    if (id && isMetaReady(path.join(tasksDir, entry))) ready.add(id);
+    if (!id) continue;
+    const status = readStatus(path.join(tasksDir, entry));
+    if (status !== null && META_READY_STATUSES.has(status)) ready.set(id, status);
   }
   return ready;
 }
@@ -429,7 +431,7 @@ process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT',  () => process.exit(0));
 
 const notified     = new Set();
-const metaNotified = new Set();
+const metaNotified = new Map(); // id → lastSeenStatus; re-emits on status change
 
 const timer = setInterval(() => {
   if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
@@ -441,11 +443,15 @@ const timer = setInterval(() => {
     notified.add(id);
   }
 
+  // L1 channel: meta-ready (Meta-Proposal, Meta-Plan, Meta-Active)
+  // Re-emits whenever status changes within META_READY_STATUSES (e.g. Proposal→Plan→Active)
   const metaReadyIds = scanMetaReadyIds(args.tasksDir);
-  for (const id of metaNotified) { if (!metaReadyIds.has(id)) metaNotified.delete(id); }
-  for (const id of [...metaReadyIds].filter(id => !metaNotified.has(id)).sort()) {
-    process.stdout.write(`meta-ready:${id}\n`);
-    metaNotified.add(id);
+  for (const [id] of metaNotified) { if (!metaReadyIds.has(id)) metaNotified.delete(id); }
+  for (const [id, status] of [...metaReadyIds].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (metaNotified.get(id) !== status) {
+      process.stdout.write(`meta-ready:${id}\n`);
+      metaNotified.set(id, status);
+    }
   }
 }, intervalMs);
 DAEMON_EOF
