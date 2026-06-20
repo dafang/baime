@@ -46,7 +46,7 @@ for f in "$TASKS_DIR"/*.md "$ARCHIVE_DIR"/*.md; do
 
   while IFS= read -r line; do
     case "$line" in
-      *"replan:"*)
+      *"replan: "*" — "*)
         [ "$is_cycle" -eq 1 ] && replan_events=$((replan_events + 1)) ;;
       *"evaluator: Met"*)
         [ "$is_cycle" -eq 1 ] && evaluator_met=$((evaluator_met + 1)) ;;

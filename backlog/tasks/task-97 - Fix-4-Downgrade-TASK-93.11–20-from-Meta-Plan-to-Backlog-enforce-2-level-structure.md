@@ -3,10 +3,10 @@ id: TASK-97
 title: >-
   Fix 4: Downgrade TASK-93.11–20 from Meta-Plan to Backlog (enforce 2-level
   structure)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-20 11:41'
-updated_date: '2026-06-20 12:13'
+updated_date: '2026-06-20 12:18'
 labels:
   - loop-meta
   - architecture
@@ -251,6 +251,8 @@ Proposal approved. Starting plan draft.
 Plan review iteration 1: APPROVED. Plan finalized with 3 phases, 12 DoD items, 4 Acceptance Gate items.
 
 claimed: 2026-06-20T12:13:44Z
+
+Completed: 2026-06-20T12:18:12Z
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
