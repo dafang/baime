@@ -9,7 +9,6 @@ created_date: '2026-06-20 08:15'
 updated_date: '2026-06-20 09:16'
 labels: []
 dependencies: []
-parent_task_id: TASK-93
 ordinal: 74000
 ---
 

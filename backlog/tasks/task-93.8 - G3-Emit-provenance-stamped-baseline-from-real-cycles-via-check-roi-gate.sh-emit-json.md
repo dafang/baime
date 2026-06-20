@@ -3,10 +3,10 @@ id: TASK-93.8
 title: >-
   G3: Emit provenance-stamped baseline from real cycles via check-roi-gate.sh
   --emit-json
-status: Done
+status: Needs Human
 assignee: []
 created_date: '2026-06-20 10:04'
-updated_date: '2026-06-20 10:47'
+updated_date: '2026-06-20 13:42'
 labels: []
 dependencies:
   - TASK-93.10
@@ -161,6 +161,10 @@ All DoD items PASS
 
 Completed: 2026-06-20T10:45:15Z
 
+Reset to Backlog 2026-06-20: previous Done was premature — baseline was emitted based on fabricated 13-cycle data (bad G2.2 run in worktree). Must re-run after ≥10 real Meta-Done cycles accumulate in main backlog.
+
+Escalated: Prerequisite not met — 0 real meta-task cycles with evaluator: Met|NotMet data in backlog/tasks/ (need ≥10). DoD #1 loose count=3, DoD #6 tight count=0. Re-queue once loop-meta has completed ≥10 real Meta-Done cycles with evaluateAndReplan evidence.
+To continue: run /loop-meta to accumulate real cycles, then set status → Ready.
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

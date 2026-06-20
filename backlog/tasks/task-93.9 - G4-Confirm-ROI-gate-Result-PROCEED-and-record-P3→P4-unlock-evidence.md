@@ -1,10 +1,10 @@
 ---
 id: TASK-93.9
 title: 'G4: Confirm ROI gate Result: PROCEED and record P3→P4 unlock evidence'
-status: Done
+status: Needs Human
 assignee: []
 created_date: '2026-06-20 10:04'
-updated_date: '2026-06-20 10:54'
+updated_date: '2026-06-20 13:42'
 labels: []
 dependencies:
   - TASK-93.8
@@ -106,6 +106,11 @@ Baseline: plugin/loop-meta/data/baseline/replan-stats.json (data_source: measure
 FAC#1-#6: all PASS.
 
 Completed: 2026-06-20T10:54:36Z
+
+Reset to Backlog 2026-06-20: previous Done was premature — PROCEED verdict was based on fabricated 13-cycle data. Must re-run after TASK-93.8 (baseline emission) is genuinely Done.
+
+Escalated: Depends on TASK-93.8 (G3 baseline) which itself requires ≥10 real meta-task cycles. Currently 0 evaluator slices recorded. Re-queue after TASK-93.8 completes.
+To continue: complete TASK-93.8 first, then set status → Ready.
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
