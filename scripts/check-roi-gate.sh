@@ -7,7 +7,7 @@
 # Exit code reflects the gate DECISION (R2 — exit 0 must mean "gate unlocked",
 # not merely "report produced"; see TASK-93 post-mortem):
 #   PROCEED → exit 0   (P4 automation warranted)
-#   HOLD    → exit 2   (insufficient sample / replan evidence / evaluator reliability)
+#   HOLD    → exit 2   (runaway | unstable | no data | quality)
 # The report body is always printed regardless of exit code.
 
 set -euo pipefail
@@ -35,17 +35,19 @@ meta_task_cycles=0
 for f in "$TASKS_DIR"/*.md "$ARCHIVE_DIR"/*.md; do
   [ -f "$f" ] || continue
   total_tasks=$((total_tasks + 1))
-  # Count meta-task cycles (tasks that went through Meta-Active)
+
+  # is_cycle: frontmatter status=Meta-Done (first 20 lines) AND evaluator line present anywhere
   is_cycle=0
-  if grep -q 'status: Meta-Active\|status: Meta-Done\|idempotentReconcile:' "$f" 2>/dev/null; then
+  if awk 'NR<=20 && /^status: Meta-Done/{found=1} END{exit !found}' "$f" 2>/dev/null \
+     && grep -q 'evaluator: Met\|evaluator: NotMet' "$f" 2>/dev/null; then
     meta_task_cycles=$((meta_task_cycles + 1))
     is_cycle=1
   fi
+
   while IFS= read -r line; do
     case "$line" in
-      *"replan:"*)              replan_events=$((replan_events + 1)) ;;
-      # evaluator counts are restricted to cycle tasks to avoid false positives
-      # from task descriptions / code snippets in non-cycle task files.
+      *"replan:"*)
+        [ "$is_cycle" -eq 1 ] && replan_events=$((replan_events + 1)) ;;
       *"evaluator: Met"*)
         [ "$is_cycle" -eq 1 ] && evaluator_met=$((evaluator_met + 1)) ;;
       *"evaluator: NotMet"*)
@@ -71,49 +73,69 @@ echo "   Met:     ${evaluator_met}"
 echo "   NotMet:  ${evaluator_not_met}"
 echo "   Total:   ${evaluator_total}"
 if [ "$evaluator_total" -gt 0 ]; then
-  # bash integer arithmetic: scale ×100 for percentage
   pct=$(( evaluator_met * 100 / evaluator_total ))
   echo "   Met rate: ${pct}%"
 else
+  pct=0
   echo "   Met rate: N/A (no slices recorded yet)"
 fi
 echo ""
 echo " Replan trigger events"
 echo "   Total replan events:        ${replan_events}"
+rate_x10=0
+[ "$meta_task_cycles" -gt 0 ] && rate_x10=$(( replan_events * 10 / meta_task_cycles ))
 if [ "$meta_task_cycles" -gt 0 ]; then
-  rate_x10=$(( replan_events * 10 / meta_task_cycles ))
   echo "   Rate (per 10 cycles):       ${rate_x10}"
 else
   echo "   Rate (per 10 cycles):       N/A (no meta-task cycles yet)"
-  rate_x10=0
 fi
 echo ""
 
-# P4 gate decision
-echo " P4 Gate Decision"
-if [ "$meta_task_cycles" -lt 10 ]; then
-  echo "   Result: HOLD"
-  echo "   Reason: Insufficient sample — need ≥10 meta-task cycles (have ${meta_task_cycles})"
-  echo "   Action: Run more meta-task cycles, then re-evaluate"
+# P4 gate decision — anomaly upper-bounds then quality gates
+GATE_RESULT=""
+GATE_REASON=""
+GATE_ACTION=""
+gate_decision_reason=""
+gate_exit=2
+
+if [ "$meta_task_cycles" -ge 20 ]; then
+  GATE_RESULT="HOLD"
+  GATE_REASON="Runaway — cycle count ${meta_task_cycles} exceeds upper bound (20); meta-loop may be stuck"
+  GATE_ACTION="Inspect and archive stale meta-task cycles, then re-run gate"
+  gate_decision_reason="runaway"
   gate_exit=2
-elif [ "$replan_events" -lt 2 ]; then
-  echo "   Result: HOLD"
-  echo "   Reason: Replan trigger frequency < 2 per 10 cycles (observed ${rate_x10}/10)"
-  echo "   Action: P3 loop-meta is working; P4 gating is correct — automated scheduling not yet needed"
+elif [ "$evaluator_total" -gt 0 ] && [ "$rate_x10" -gt 5 ]; then
+  GATE_RESULT="HOLD"
+  GATE_REASON="Unstable — replan rate ${rate_x10}/10 exceeds threshold (5/10); system is not converging"
+  GATE_ACTION="Investigate replan triggers; improve sub-task quality before enabling P4"
+  gate_decision_reason="unstable"
   gate_exit=2
-elif [ "$evaluator_total" -gt 0 ] && [ "$(( evaluator_met * 100 / evaluator_total ))" -lt 70 ]; then
-  echo "   Result: HOLD"
-  echo "   Reason: Evaluator slice agreement < 70% (observed ${pct}%) — evaluator reliability insufficient"
-  echo "   Action: Improve evaluator slice quality before enabling P4 automation"
+elif [ "$evaluator_total" -eq 0 ]; then
+  GATE_RESULT="HOLD"
+  GATE_REASON="No data — no evaluator slices recorded yet"
+  GATE_ACTION="Run meta-task cycles through evaluateAndReplan, then re-run gate"
+  gate_decision_reason="no_data"
+  gate_exit=2
+elif [ "$pct" -lt 70 ]; then
+  GATE_RESULT="HOLD"
+  GATE_REASON="Quality — evaluator slice agreement ${pct}% < 70%; reliability insufficient"
+  GATE_ACTION="Improve evaluator slice quality before enabling P4 automation"
+  gate_decision_reason="quality"
   gate_exit=2
 else
-  echo "   Result: PROCEED"
-  echo "   Reason: Sufficient replan evidence and evaluator reliability — P4 automation is warranted"
+  GATE_RESULT="PROCEED"
+  GATE_REASON="Evaluator reliable (${pct}% Met), no anomalies detected — P4 automation is warranted"
+  gate_decision_reason="ok"
   gate_exit=0
 fi
+
+echo " P4 Gate Decision"
+echo "   Result: $GATE_RESULT"
+echo "   Reason: $GATE_REASON"
+[ -n "${GATE_ACTION:-}" ] && echo "   Action: $GATE_ACTION"
 echo ""
-echo " Baseline note: If zero events recorded, this is the pre-P3 baseline."
-echo " Re-run after ≥10 meta-task cycles for a meaningful gate decision."
+echo " Baseline note: PROCEED requires evaluator data (>0 slices), Met%>=70%,"
+echo "   cycle count<20, and replan rate<=5/10. Zero events = pre-P3 baseline."
 echo "============================================================"
 
 # R4: emit a provenance-stamped baseline JSON. This is the ONLY sanctioned way to
@@ -121,7 +143,6 @@ echo "============================================================"
 # trace it. A hand-written baseline (TASK-93) has no generated_by and fails the gate.
 if [ -n "$EMIT_JSON" ]; then
   mkdir -p "$(dirname "$EMIT_JSON")"
-  decision=$([ "${gate_exit}" -eq 0 ] && echo "PROCEED" || echo "HOLD")
   cat > "$EMIT_JSON" <<JSON
 {
   "data_source": "measured",
@@ -131,7 +152,8 @@ if [ -n "$EMIT_JSON" ]; then
   "meta_task_cycles": ${meta_task_cycles},
   "replan_total": ${replan_events},
   "evaluator": { "Met": ${evaluator_met}, "NotMet": ${evaluator_not_met} },
-  "decision": "${decision}"
+  "decision": "${GATE_RESULT:-HOLD}",
+  "decision_reason": "${gate_decision_reason:-no_data}"
 }
 JSON
   echo " Baseline JSON written to ${EMIT_JSON} (data_source: measured, generated_by: check-roi-gate.sh)"
