@@ -475,8 +475,42 @@ checkEscalation() {
     return 1
   fi
 
-  # noProgress: children stuck in Backlog too long (simplified: >7 days)
-  # diverging: children count > 2× desired (not implemented in V1, placeholder)
+  # noProgress: all children stuck in Backlog for ≥7 days
+  FIRST_RECONCILE_DATE=$(backlog task view "$META_ID" --plain \
+    | grep 'idempotentReconcile:' | head -1 \
+    | grep -oP '\d{4}-\d{2}-\d{2}' | head -1 || true)
+  if [ -n "$FIRST_RECONCILE_DATE" ]; then
+    DAYS_SINCE=$(( ( $(date -u +%s) - $(date -u -d "$FIRST_RECONCILE_DATE" +%s) ) / 86400 ))
+    ALL_IN_BACKLOG=true
+    while IFS= read -r TID; do
+      STATUS=$(backlog task view "$TID" --plain \
+        | grep -oP '(?<=status: )\S.*' | head -1 | xargs)
+      [ "$STATUS" != "Backlog" ] && ALL_IN_BACKLOG=false && break
+    done < <(backlog task list --plain | grep -oP 'TASK-\d+' | while read T; do
+      backlog task view "$T" --plain | grep -q "parentTask: ${META_ID}" && echo "$T"
+    done)
+    if $ALL_IN_BACKLOG && [ "$DAYS_SINCE" -ge 7 ]; then
+      backlog task edit "$META_ID" \
+        --status "Needs Human" \
+        --append-notes "noProgress: all children in Backlog for ${DAYS_SINCE} days (threshold: 7)"
+      return 1
+    fi
+  fi
+
+  # diverging: actual child count > 2× desired (decomposer line count)
+  DESIRED_COUNT=$(backlog task view "$META_ID" --plain \
+    | awk '/^Implementation Plan:/,/^[A-Z][a-z]/' \
+    | grep -c '^\s*[-*]' || true)
+  ACTUAL_COUNT=$(backlog task list --plain | grep -oP 'TASK-\d+' | while read T; do
+    backlog task view "$T" --plain | grep -q "parentTask: ${META_ID}" && echo "$T"
+  done | wc -l)
+  if [ "$DESIRED_COUNT" -gt 0 ] && [ "$ACTUAL_COUNT" -gt $((DESIRED_COUNT * 2)) ]; then
+    backlog task edit "$META_ID" \
+      --status "Needs Human" \
+      --append-notes "diverging: actual=${ACTUAL_COUNT} > 2×desired=${DESIRED_COUNT} — manual review needed"
+    return 1
+  fi
+
   return 0
 }
 ```

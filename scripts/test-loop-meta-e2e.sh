@@ -297,6 +297,105 @@ fixture_add_child "Gated task"
 # Verify the gate by checking the meta-task status has not changed automatically.
 assert "loop-meta does not auto-advance past Meta-Plan" "$(fixture_get_status)" "Meta-Plan"
 
+# ── Test 7a: evaluateAndReplan — Met → converged (no replan needed) ───────────
+echo ""
+echo "evaluateAndReplan — Met → converged:"
+fixture_reset
+META_STATUS="Meta-Active"
+fixture_add_child "Sub-task A"
+fixture_add_child "Sub-task B"
+fixture_set_child_status 0 "Done"
+fixture_set_child_status 1 "Done"
+
+# Simulate evaluator slices: all pass
+evaluator_met() {
+  fixture_append_note "evaluator: Met | oracle=Pass | dod=Pass | trace=Pass | data_source: measured"
+  echo "Met"
+}
+
+evaluateAndReplan() {
+  local done_count=0
+  local i=0
+  while [ "$i" -lt "$CHILD_COUNT" ]; do
+    s=$(fixture_get_child_status "$i")
+    [ "$s" = "Done" ] && done_count=$((done_count + 1))
+    i=$((i + 1))
+  done
+  [ "$done_count" -eq 0 ] && return 0
+
+  VERDICT=$(evaluator_met)
+  if [ "$VERDICT" = "Met" ]; then
+    fixture_append_note "evaluateAndReplan: verdict=Met — no replan needed"
+  fi
+}
+
+evaluateAndReplan
+NOTES="$(fixture_get_notes)"
+assert_contains "evaluator Met note written" "$NOTES" "evaluator: Met"
+assert_contains "evaluateAndReplan: no replan" "$NOTES" "verdict=Met"
+assert "status unchanged on Met verdict" "$(fixture_get_status)" "Meta-Active"
+assert "no escalation on Met verdict" "$ESCALATED_STATUS" ""
+
+# ── Test 7b: evaluateAndReplan — NotMet → replan triggered ───────────────────
+echo ""
+echo "evaluateAndReplan — NotMet → replan triggered:"
+fixture_reset
+META_STATUS="Meta-Active"
+fixture_add_child "Sub-task X"
+fixture_set_child_status 0 "Done"
+
+# Simulate evaluator returning NotMet
+evaluator_not_met() {
+  fixture_append_note "evaluator: NotMet | oracle=Fail | dod=Pass | trace=Pass | data_source: measured"
+  echo "NotMet"
+}
+
+# Simulate replanner classifying root cause and patching plan
+replanner_sim() {
+  fixture_append_note "replan: impl — oracle slice failed; patching implementation path"
+}
+
+evaluateAndReplan_notmet() {
+  local done_count=0
+  local i=0
+  while [ "$i" -lt "$CHILD_COUNT" ]; do
+    s=$(fixture_get_child_status "$i")
+    [ "$s" = "Done" ] && done_count=$((done_count + 1))
+    i=$((i + 1))
+  done
+  [ "$done_count" -eq 0 ] && return 0
+
+  VERDICT=$(evaluator_not_met)
+  if [ "$VERDICT" = "NotMet" ]; then
+    replanner_sim
+    fixture_append_note "evaluateAndReplan: verdict=NotMet — replan triggered"
+  fi
+}
+
+evaluateAndReplan_notmet
+NOTES="$(fixture_get_notes)"
+assert_contains "evaluator NotMet note written" "$NOTES" "evaluator: NotMet"
+assert_contains "replan note written" "$NOTES" "replan: impl"
+assert_contains "evaluateAndReplan replan note" "$NOTES" "verdict=NotMet"
+assert "status unchanged before escalation" "$(fixture_get_status)" "Meta-Active"
+
+# Infeasible root cause → escalate
+fixture_clear_notes
+evaluator_infeasible() { echo "NotMet"; }
+replanner_infeasible() {
+  fixture_escalate "infeasible: acceptance criteria cannot be met by any known path"
+}
+
+evaluateAndReplan_infeasible() {
+  VERDICT=$(evaluator_infeasible)
+  [ "$VERDICT" = "NotMet" ] && replanner_infeasible
+}
+
+evaluateAndReplan_infeasible
+NOTES="$(fixture_get_notes)"
+assert_contains "infeasible replan escalates" "$NOTES" "infeasible:"
+assert "status escalated on infeasible" "$(fixture_get_status)" "Needs Human"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "${PASS} passed, ${FAIL} failed"
