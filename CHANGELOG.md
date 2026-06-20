@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-20
+
+### Added
+- `skill-quality`: Class A (binary-gate / freshnessCheck) and Class B (invariant-check / reviewPlan) production oracle runners with P-full injection, dual accuracy reporting, and scorer-warning — TASK-55
+- `skill-quality`: Class D tool-invocation compliance runner using live `claude -p --output-format stream-json` traces — TASK-48, TASK-49
+- `skill-quality`: provenance gate (`check-provenance.sh`) — estimated values cannot masquerade as measured; `data_source` field required in all result artifacts — TASK-52
+- `skill-quality`: fixture lint (`fixture-lint.sh`), harness injection self-check, and negative-control sanity fixtures — TASK-53
+- `skill-quality`: `oracle-class-a` and `oracle-class-b` jobs added to `oracle.yml` CI; three oracle classes (A/B/C) now have full regression coverage — TASK-55
+- `backlog-setup`: `contracts:` field added to SKILL.md frontmatter with 5 structural invariants — TASK-56
+- `loop-backlog`: Critical Protocol section and behavioral contracts — TASK-47
+
+### Changed
+- `docs/baime-oca-process-refinements.md`: OCA convergence criteria revised — V_instance dual-track (`self_eval_accuracy` + `behavioral_accuracy`), `mechanically-passed` vs `substantively-verified` distinction, Higher Evidence Standard (HES) clause prohibiting self-exemption — TASK-54
+- `knowledge-extractor`: ≤40-line constraint abolished based on Exp-F (H-ref CONFIRMED, 18pp accuracy gap); Spec ≤40 lines, Implementation unconstrained — documented in OCA process refinements
+- `skill-quality`: Exp-G (TASK-45) INCONCLUSIVE — no systematic self-eval inflation; Exp-H (TASK-46) H-universal CONFIRMED — global oracle thresholds (Class A/B/C) generalize across skills (σ=0.020)
+
 ## [1.3.0] - 2026-06-18
 
 ### Added
