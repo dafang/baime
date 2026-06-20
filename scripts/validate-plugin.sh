@@ -680,6 +680,30 @@ META_WARNINGS=$?
 set -e
 WARNINGS=$((WARNINGS + META_WARNINGS))
 
+# ── Nested Meta Task Check ────────────────────────────────────────────────────
+
+echo ""
+echo "=== Nested Meta Task Check ==="
+
+TASKS_DIR="$REPO_ROOT/backlog/tasks"
+if [ -d "$TASKS_DIR" ]; then
+  while IFS= read -r -d '' task_file; do
+    # Extract status and parent_task_id from first 20 lines (frontmatter only)
+    STATUS_VAL=$(head -20 "$task_file" | awk -F': ' '/^status:/ { print $2; exit }')
+    PARENT_VAL=$(head -20 "$task_file" | awk -F': ' '/^parent_task_id:/ { print $2; exit }')
+    case "$STATUS_VAL" in
+      Meta-Plan|Meta-Active|Meta-Proposal|Meta-Done)
+        if [ -n "$PARENT_VAL" ]; then
+          echo "  ERROR: Nested Meta Task: $(basename "$task_file") status=$STATUS_VAL parent_task_id=$PARENT_VAL"
+          ERRORS=$((ERRORS + 1))
+        fi
+        ;;
+    esac
+  done < <(find "$TASKS_DIR" -maxdepth 1 -name '*.md' -print0)
+else
+  pass "Nested Meta Task Check: no backlog/tasks/ directory found"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
