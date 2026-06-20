@@ -17,6 +17,14 @@ contracts:
     target: self
   - grep: "replanner"
     target: self
+  - grep: "draftMetaProposal"
+    target: self
+  - grep: "Meta-Proposal"
+    target: self
+  - grep: "gateHuman"
+    target: self
+  - grep: "reviewLoop"
+    target: self
 ---
 
 λ() → metaLoop()
@@ -31,18 +39,48 @@ data Outcome = Proposed | Reconciled | Escalated Reason | Idle | Stopped
 metaLoop :: TaskId → Outcome
 metaLoop(id) =
   | stopSentinel()         → Stopped
-  | status(id) == MetaProposal → draftProposal(id)
+  | status(id) == MetaProposal → draftMetaProposal(id)
   | status(id) == MetaPlan    → draftDecomposition(id)
   | status(id) == MetaActive  → idempotentReconcile(id)
   | otherwise              → Idle
 
--- draftProposal: for Meta-Proposal tasks, generate a structured proposal doc
--- from the meta-task description and pause for human review.
-draftProposal :: TaskId → Outcome
-draftProposal(id) = {
+-- draftMetaProposal: intake path for Meta-Proposal tasks. Drafts a structured
+-- proposal doc from the description, then enters reviewLoop (max 4 iterations)
+-- to collect human feedback before the human advances to Meta-Plan.
+draftMetaProposal :: TaskId → Outcome
+draftMetaProposal(id) = {
   goal:  readField(id, "description"),
   doc:   Agent(prompt=proposalPrompt(goal)),    -- subagent writes proposal to notes
-  _:     appendNote(id, "Meta-proposal drafted. Review and advance to Meta-Plan to continue."),
+  _:     reviewLoop(id, doc, maxIter=4),
+  return: Proposed
+}
+
+-- gateHuman: append a note requesting human action and halt.
+-- Never auto-advances status — the human must set the next status.
+-- Returns after appending; control resumes only on the next meta-ready event.
+gateHuman :: (TaskId, Message) → ()
+gateHuman(id, msg) = {
+  appendNote(id, msg)
+  -- loop-meta halts here; daemon will emit meta-ready again on next poll
+}
+
+-- reviewLoop: iterative human-review gate for Meta-Proposal tasks.
+-- Calls gateHuman each iteration. If the human advances status beyond
+-- Meta-Proposal before maxIter is reached, the next meta-ready event will
+-- dispatch to draftDecomposition or idempotentReconcile — reviewLoop is
+-- not re-entered. If maxIter is exhausted without approval, escalates.
+reviewLoop :: (TaskId, Doc, Int) → Outcome
+reviewLoop(id, doc, maxIter) = {
+  iter: countNotes(id, "reviewLoop:"),
+
+  if (iter >= maxIter):
+    return: escalate(id, "reviewLoop exhausted: " + maxIter
+                       + " iterations without human approval"),
+
+  gateHuman(id, "reviewLoop: iteration " + (iter+1) + "/" + maxIter
+               + " — review proposal and set status → Meta-Plan to approve,"
+               + " or add feedback note and leave status unchanged for revision."),
+  appendNote(id, "reviewLoop: iteration " + str(iter+1) + " of " + str(maxIter)),
   return: Proposed
 }
 
@@ -294,6 +332,59 @@ Plan:
 ${PLAN}
 DECOMP_EOF
   )")
+}
+```
+
+### draftMetaProposal
+
+```bash
+draftMetaProposal() {
+  local META_ID="$1"
+
+  # Draft proposal via subagent
+  GOAL=$(backlog task view "$META_ID" --plain | grep -oP '(?<=Description: ).+' | head -1)
+  # Subagent writes proposal text; result captured for reviewLoop
+  DOC=$(Agent(run_in_background=false, prompt="Draft a structured Meta-Proposal for: ${GOAL}"))
+
+  reviewLoop "$META_ID" "$DOC" 4
+}
+```
+
+### gateHuman
+
+```bash
+gateHuman() {
+  local META_ID="$1"
+  local MSG="$2"
+  backlog task edit "$META_ID" --append-notes "$MSG"
+  # Halt: loop-meta exits; daemon emits meta-ready again on next poll cycle
+}
+```
+
+### reviewLoop
+
+```bash
+reviewLoop() {
+  local META_ID="$1"
+  local DOC="$2"
+  local MAX_ITER="$3"
+
+  # Count prior reviewLoop iterations recorded in notes
+  ITER=$(backlog task view "$META_ID" --plain | grep -c "reviewLoop:" || true)
+
+  if [ "$ITER" -ge "$MAX_ITER" ]; then
+    backlog task edit "$META_ID" \
+      --status "Needs Human" \
+      --append-notes "Escalated: reviewLoop exhausted — ${MAX_ITER} iterations without human approval"
+    return 1
+  fi
+
+  ITER_NEXT=$((ITER + 1))
+  gateHuman "$META_ID" \
+    "reviewLoop: iteration ${ITER_NEXT}/${MAX_ITER} — review proposal and set status → Meta-Plan to approve, or add feedback note and leave status unchanged for revision."
+
+  backlog task edit "$META_ID" --append-notes \
+    "reviewLoop: iteration ${ITER_NEXT} of ${MAX_ITER}"
 }
 ```
 
