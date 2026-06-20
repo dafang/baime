@@ -74,11 +74,14 @@ workerLoop() = {
 
   if (empty(tasks)):
     -- No task yet; block persistently until daemon emits a task-ready line
+    -- meta-ready:* lines are silently ignored here — handled by loop-meta in its own session
     event: Monitor(persistent=true),
     if (event matches "task-ready:TASK-*"):
       return: workerLoop(),
     if (stopSentinel()):
       return: Stopped,
+    -- otherwise (meta-ready:*, noise): loop back silently
+    return: workerLoop(),
 
   -- Parallel: create worktrees and spawn one background agent per task
   worktrees: ∀t ∈ tasks: withWorktree(t, cfg),
@@ -945,7 +948,8 @@ The top-level orchestration using claimBatch, background Agent spawning, and ser
 if [ -z "$CLAIMED_TASK_IDS" ]; then
   # No ready tasks — block on daemon event
   # Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
-  # On task-ready event: re-enter workerLoop
+  # On task-ready:TASK-N event: re-enter workerLoop
+  # meta-ready:* lines are silently ignored — handled by loop-meta in its own session
   exit 0
 fi
 

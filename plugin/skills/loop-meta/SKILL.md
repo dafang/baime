@@ -31,15 +31,52 @@ contracts:
     target: self
   - grep: "budget exhausted"
     target: self
+  - grep: "metaWorkerLoop"
+    target: self
+  - grep: "Monitor(persistent=true"
+    target: self
+  - grep: "loop-meta-stop"
+    target: self
+  - grep: "catchUpScan"
+    target: self
 ---
 
-λ() → metaLoop()
+λ() → metaWorkerLoop()
 
 ## Spec
 
 data MetaStatus = MetaProposal | MetaPlan | MetaActive | MetaDone | NeedsHuman
 
 data Outcome = Proposed | Reconciled | Escalated Reason | Idle | Stopped
+
+-- metaWorkerLoop: top-level event loop. Ensures the shared daemon is running,
+-- processes existing meta-tasks on startup (catch-up), then blocks on Monitor
+-- for meta-ready events. Runs in its own Claude Code session, independent of
+-- loop-backlog. Stop via backlog/.loop-meta-stop or the shared backlog/.loop-stop.
+metaWorkerLoop :: () → Outcome
+metaWorkerLoop() = {
+  _:  daemonBootstrap(),
+  _:  catchUpScan(),
+  loop:
+    if (stopSentinel()): return Stopped,
+    event: Monitor(persistent=true, command="tail -f DAEMON_LOG"),
+    | stopSentinel()                → return Stopped
+    | event matches "meta-ready:*" → metaLoop(extractId(event)); loop
+    | otherwise                    → loop   -- ignore task-ready: and noise
+}
+
+-- catchUpScan: on startup, dispatch all existing meta-tasks immediately.
+-- Prevents tasks created before this session started from being missed.
+catchUpScan :: () → ()
+catchUpScan() =
+  ∀status ∈ {MetaProposal, MetaPlan, MetaActive}:
+    ∀id ∈ tasksWithStatus(status):
+      if (¬stopSentinel()): metaLoop(id)
+
+-- stopSentinel: true if either stop file exists.
+stopSentinel :: () → Bool
+stopSentinel() =
+  exists("backlog/.loop-meta-stop") ∨ exists("backlog/.loop-stop")
 
 -- Entry point: invoked when a meta-ready event is received for a meta-task.
 metaLoop :: TaskId → Outcome
@@ -286,6 +323,59 @@ case "$META_STATUS" in
     exit 0
     ;;
 esac
+```
+
+### metaWorkerLoop
+
+Top-level event loop. Call once per Claude Code session — runs until a stop
+sentinel is written. Stop loop-meta only: `touch backlog/.loop-meta-stop`.
+Stop both workers: `touch backlog/.loop-stop`.
+
+```bash
+metaWorkerLoop() {
+  BACKLOG_DIR="${REPO_ROOT}/backlog"
+  DAEMON_LOG="${BACKLOG_DIR}/.daemon.log"
+  STOP_FILE="${BACKLOG_DIR}/.loop-stop"
+  META_STOP_FILE="${BACKLOG_DIR}/.loop-meta-stop"
+
+  # 1. Ensure the shared daemon is running (idempotent — safe if loop-backlog already started it)
+  daemonBootstrap
+
+  # 2. Catch-up: process meta-tasks that existed before this session started
+  catchUpScan
+
+  # 3. Stop check before entering event loop
+  [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
+
+  # 4. Block on daemon log; dispatch meta-ready events, ignore everything else
+  Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
+  # For each output line from Monitor:
+  #   - Matches meta-ready:TASK-N  → metaLoop "$TASK_ID"
+  #   - Stop sentinel present      → exit 0
+  #   - Otherwise (task-ready:*, noise) → ignore, continue loop
+}
+```
+
+### catchUpScan
+
+On startup, processes any meta-tasks already in the backlog before the Monitor
+starts. Prevents tasks created before this session from being missed.
+
+```bash
+catchUpScan() {
+  BACKLOG_DIR="${REPO_ROOT}/backlog"
+  STOP_FILE="${BACKLOG_DIR}/.loop-stop"
+  META_STOP_FILE="${BACKLOG_DIR}/.loop-meta-stop"
+
+  for STATUS in "Meta-Proposal" "Meta-Plan" "Meta-Active"; do
+    backlog task list --status "$STATUS" --plain \
+      | grep -oP 'TASK-\d+' \
+      | while read -r TID; do
+          [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
+          metaLoop "$TID"
+        done
+  done
+}
 ```
 
 ### idempotentReconcile
