@@ -13,6 +13,10 @@ contracts:
     target: self
   - not-grep: "git worktree add"
     target: self
+  - grep: "evaluator"
+    target: self
+  - grep: "replanner"
+    target: self
 ---
 
 λ() → metaLoop()
@@ -125,6 +129,68 @@ escalate(id, r) = {
   appendNote(id, "Escalated: " + r
                + "\nTo continue: answer in notes and set status → Meta-Active."),
   return: Escalated(r)
+}
+
+
+-- evaluator: slice-aggregate quality assessor. Takes a meta-task and its Done
+-- children; produces a Met/NotMet verdict from three independent slices.
+-- Each slice MUST carry data_source: measured — no estimated inputs accepted.
+-- Slice types:
+--   layer25_oracle : run Class A/B oracle from experiments/skill-quality/artifacts/
+--   dod_aggregate  : check all child DoD shell-gate pass counts from task notes
+--   trace_replay   : replay execution log patterns against acceptance specs
+evaluator :: (TaskId, [TaskId]) → EvalResult
+evaluator(metaId, doneChildren) = {
+  oracle_slice : runLayer25Oracle(doneChildren),    -- data_source: measured
+  dod_slice    : aggregateDodResults(doneChildren), -- data_source: measured
+  trace_slice  : replayTraces(metaId),              -- data_source: measured
+
+  if (any(s → s.data_source ≠ "measured", [oracle_slice, dod_slice, trace_slice])):
+    raise InvalidEvidenceError("estimated slices not permitted in evaluator"),
+
+  verdict: if (all(slicePassed, [oracle_slice, dod_slice, trace_slice])): Met
+           else: NotMet(reasons=[s.reason | s ← slices, ¬slicePassed(s)]),
+
+  _: appendNote(metaId, "evaluator: " + verdict.label
+               + " | oracle=" + oracle_slice.label
+               + " | dod=" + dod_slice.label
+               + " | trace=" + trace_slice.label
+               + " | data_source: measured"),
+  return: verdict
+}
+
+-- replanner: root-cause diagnostician. Invoked only when evaluator returns NotMet.
+-- Classifies root cause and rewrites the meta-plan path to resolve it.
+-- MUST NOT modify acceptance criteria — only the path to meet them.
+-- Root cause taxonomy: impl | sub-plan | meta-plan | harness | infeasible
+replanner :: (TaskId, NotMet) → ReplanResult
+replanner(metaId, notMet) = {
+  evidence: readNotes(metaId) ++ notMet.reasons,
+  rootCause: classify(evidence),   -- impl | sub-plan | meta-plan | harness | infeasible
+
+  if (rootCause == infeasible):
+    return: escalate(metaId, "infeasible: acceptance criteria cannot be met by any known path"),
+
+  updatedPlan: patchPath(readField(metaId, "implementationPlan"), rootCause, evidence),
+  _: appendNote(metaId, "replan: " + rootCause + " — " + summarise(evidence)),
+  _: updateField(metaId, "implementationPlan", updatedPlan),
+  return: Replanned(rootCause, updatedPlan)
+}
+
+-- evaluateAndReplan: integrate evaluate→replan branch into reconcile.
+-- Triggered only when Meta-Active and at least one child is Done.
+evaluateAndReplan :: TaskId → ()
+evaluateAndReplan(metaId) = {
+  doneChildren: filter(c → status(c) == Done, listChildren(metaId)),
+  if (empty(doneChildren)): return,
+
+  result: evaluator(metaId, doneChildren),
+  if (result == Met): return,
+
+  -- NotMet: diagnose and replan
+  replanResult: replanner(metaId, result),
+  if (replanResult == Escalated): return   -- handled by escalate()
+  -- otherwise: idempotentReconcile will pick up the patched plan on next cycle
 }
 
 ## Implementation
