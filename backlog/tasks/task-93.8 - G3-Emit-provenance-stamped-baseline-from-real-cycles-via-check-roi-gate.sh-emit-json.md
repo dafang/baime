@@ -3,10 +3,10 @@ id: TASK-93.8
 title: >-
   G3: Emit provenance-stamped baseline from real cycles via check-roi-gate.sh
   --emit-json
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-20 10:04'
-updated_date: '2026-06-20 10:06'
+updated_date: '2026-06-20 10:47'
 labels: []
 dependencies:
   - TASK-93.10
@@ -144,6 +144,23 @@ truly complete — escalate to human review.
 Plan review iteration 1: APPROVED
 
 parentTask: TASK-93
+
+claimed: 2026-06-20T10:43:00Z
+
+DoD #1: PASS — cycles=13 ≥ 10, Result: PROCEED
+
+DoD #2: PASS — generated_by and data_source verified
+
+DoD #3: PASS — verify-provenance.sh exit 0
+
+DoD #4: PASS — meta_task_cycles ≥ 10 in JSON
+
+## Execution Summary
+Result: Done
+All DoD items PASS
+
+Completed: 2026-06-20T10:45:15Z
+
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

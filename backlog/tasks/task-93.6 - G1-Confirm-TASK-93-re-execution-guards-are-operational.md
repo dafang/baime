@@ -1,10 +1,10 @@
 ---
 id: TASK-93.6
 title: 'G1: Confirm TASK-93 re-execution guards are operational'
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-20 09:59'
-updated_date: '2026-06-20 10:00'
+updated_date: '2026-06-20 10:19'
 labels: []
 dependencies: []
 parent_task_id: TASK-93
@@ -105,23 +105,71 @@ process.
 Plan review iteration 1: APPROVED — all phases have specific actionable instructions, all DoD items are shell commands, phase ordering is correct (scripts verified before individual guard tests, data dirs last), scope is tightly bounded to pre-flight checks only.
 
 parentTask: TASK-93
+
+claimed: 2026-06-20T10:15:00Z
+
+Phase 1 ✓ 2026-06-20T00:00:00Z
+All three guard scripts present and executable
+DoD #1: PASS — test -x scripts/verify-subtask-dod.sh
+DoD #2: PASS — test -x scripts/check-roi-gate.sh
+DoD #3: PASS — test -x scripts/verify-provenance.sh
+
+Phase 2 ✓ 2026-06-20T00:00:00Z
+R1 guard verify-subtask-dod.sh CLI contract confirmed
+DoD #4: PASS — bash scripts/verify-subtask-dod.sh --help 2>&1 | grep -q 'META_ID'
+
+Phase 3 ✓ 2026-06-20T00:00:00Z
+R2 guard exit-code contract confirmed in check-roi-gate.sh source
+DoD #5: PASS — grep -q 'gate_exit=0' scripts/check-roi-gate.sh
+DoD #6: PASS — grep -q 'gate_exit=2' scripts/check-roi-gate.sh
+
+Phase 4 ✓ 2026-06-20T00:00:00Z
+R4 guard --emit-json provenance stamp confirmed
+DoD #7: PASS — bash scripts/check-roi-gate.sh --emit-json /tmp/g1-probe.json 2>/dev/null; test -f /tmp/g1-probe.json
+DoD #8: PASS — grep -q 'generated_by' /tmp/g1-probe.json
+
+Phase 5 ✓ 2026-06-20T00:00:00Z
+R5 guard verify-provenance.sh correctly rejects fabricated artifacts and accepts valid ones
+DoD #9: PASS — guard exited non-zero for measured JSON without generated_by
+DoD #10: PASS — guard exited 0 for measured JSON with generated_by field
+
+Phase 6 ✓ 2026-06-20T00:00:00Z
+Data directory structure confirmed and writable; validate-plugin.sh passed
+DoD #11: PASS — test -d plugin/loop-meta/data/baseline
+DoD #12: PASS — test -d plugin/loop-meta/data/task-notes
+DoD #13: PASS — touch plugin/loop-meta/data/baseline/.write-check && rm ...
+DoD #14: PASS — touch plugin/loop-meta/data/task-notes/.write-check && rm ...
+DoD #15: PASS — bash scripts/validate-plugin.sh (0 errors, 55 warnings)
+
+## Execution Summary
+Result: Done
+Commit: no changes
+1. Phase 1 PASS: All 3 guard scripts exist and are executable
+2. Phase 2 PASS: verify-subtask-dod.sh --help contains META_ID
+3. Phase 3 PASS: check-roi-gate.sh encodes gate_exit=0 and gate_exit=2
+4. Phase 4 PASS: check-roi-gate.sh --emit-json writes /tmp/g1-probe.json with generated_by field
+5. Phase 5 PASS: verify-provenance.sh rejects artifact without generated_by; accepts one with it
+6. Phase 6 PASS: data/baseline and data/task-notes exist and are writable; validate-plugin.sh passes
+
+workerLoop DoD verified: all 15 commands passed
+Completed: 2026-06-20T10:20:00Z
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 test -x scripts/verify-subtask-dod.sh
-- [ ] #2 test -x scripts/check-roi-gate.sh
-- [ ] #3 test -x scripts/verify-provenance.sh
-- [ ] #4 bash scripts/verify-subtask-dod.sh --help 2>&1 | grep -q 'META_ID'
-- [ ] #5 grep -q 'gate_exit=0' scripts/check-roi-gate.sh
-- [ ] #6 grep -q 'gate_exit=2' scripts/check-roi-gate.sh
-- [ ] #7 bash scripts/check-roi-gate.sh --emit-json /tmp/g1-probe.json 2>/dev/null; test -f /tmp/g1-probe.json
-- [ ] #8 grep -q 'generated_by' /tmp/g1-probe.json
-- [ ] #9 mkdir -p /tmp/g1-prov-test && printf '{"data_source":"measured","value":42}\n' > /tmp/g1-prov-test/fake.json && ! bash scripts/verify-provenance.sh /tmp/g1-prov-test 2>/dev/null
-- [ ] #10 printf '{"data_source":"measured","value":42,"generated_by":"scripts/check-roi-gate.sh"}\n' > /tmp/g1-prov-test/valid.json && rm /tmp/g1-prov-test/fake.json && bash scripts/verify-provenance.sh /tmp/g1-prov-test 2>/dev/null
-- [ ] #11 test -d plugin/loop-meta/data/baseline
-- [ ] #12 test -d plugin/loop-meta/data/task-notes
-- [ ] #13 touch plugin/loop-meta/data/baseline/.write-check && rm plugin/loop-meta/data/baseline/.write-check
-- [ ] #14 touch plugin/loop-meta/data/task-notes/.write-check && rm plugin/loop-meta/data/task-notes/.write-check
-- [ ] #15 bash scripts/validate-plugin.sh
+- [x] #1 test -x scripts/verify-subtask-dod.sh
+- [x] #2 test -x scripts/check-roi-gate.sh
+- [x] #3 test -x scripts/verify-provenance.sh
+- [x] #4 bash scripts/verify-subtask-dod.sh --help 2>&1 | grep -q 'META_ID'
+- [x] #5 grep -q 'gate_exit=0' scripts/check-roi-gate.sh
+- [x] #6 grep -q 'gate_exit=2' scripts/check-roi-gate.sh
+- [x] #7 bash scripts/check-roi-gate.sh --emit-json /tmp/g1-probe.json 2>/dev/null; test -f /tmp/g1-probe.json
+- [x] #8 grep -q 'generated_by' /tmp/g1-probe.json
+- [x] #9 mkdir -p /tmp/g1-prov-test && printf '{"data_source":"measured","value":42}\n' > /tmp/g1-prov-test/fake.json && ! bash scripts/verify-provenance.sh /tmp/g1-prov-test 2>/dev/null
+- [x] #10 printf '{"data_source":"measured","value":42,"generated_by":"scripts/check-roi-gate.sh"}\n' > /tmp/g1-prov-test/valid.json && rm /tmp/g1-prov-test/fake.json && bash scripts/verify-provenance.sh /tmp/g1-prov-test 2>/dev/null
+- [x] #11 test -d plugin/loop-meta/data/baseline
+- [x] #12 test -d plugin/loop-meta/data/task-notes
+- [x] #13 touch plugin/loop-meta/data/baseline/.write-check && rm plugin/loop-meta/data/baseline/.write-check
+- [x] #14 touch plugin/loop-meta/data/task-notes/.write-check && rm plugin/loop-meta/data/task-notes/.write-check
+- [x] #15 bash scripts/validate-plugin.sh
 <!-- DOD:END -->

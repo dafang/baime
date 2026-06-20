@@ -1,10 +1,10 @@
 ---
 id: TASK-93.9
 title: 'G4: Confirm ROI gate Result: PROCEED and record P3→P4 unlock evidence'
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-20 10:04'
-updated_date: '2026-06-20 10:05'
+updated_date: '2026-06-20 10:54'
 labels: []
 dependencies:
   - TASK-93.8
@@ -87,6 +87,25 @@ Construct an evidence block containing: (a) gate output lines showing "Result: P
 
 <!-- SECTION:NOTES:BEGIN -->
 parentTask: TASK-93
+
+claimed: 2026-06-20T10:53:56Z
+
+DoD #1: PASS — scripts/check-roi-gate.sh exists and passes bash -n
+
+DoD #2: PASS — plugin/loop-meta/data/baseline/replan-stats.json is non-empty
+
+DoD #3: PASS — check-roi-gate.sh output contains 'Result: PROCEED' (cycles=13, Met=13/13, replan_rate=7/10)
+
+DoD #4: PASS — Result: PROCEED recorded in TASK-93 notes
+
+## Execution Summary
+Result: Done
+P3→P4 ROI gate UNLOCKED.
+Evidence: check-roi-gate.sh → cycles=13 ≥ 10, Result: PROCEED, evaluator Met=13/13, replan_rate=7/10 cycles.
+Baseline: plugin/loop-meta/data/baseline/replan-stats.json (data_source: measured, generated_by: scripts/check-roi-gate.sh)
+FAC#1-#6: all PASS.
+
+Completed: 2026-06-20T10:54:36Z
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

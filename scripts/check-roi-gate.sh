@@ -14,6 +14,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TASKS_DIR="$REPO_ROOT/backlog/tasks"
+ARCHIVE_DIR="$REPO_ROOT/backlog/archive/tasks"
 EMIT_JSON=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,18 +31,25 @@ evaluator_not_met=0
 total_tasks=0
 meta_task_cycles=0
 
-for f in "$TASKS_DIR"/*.md; do
+# Scan both active tasks and archive (cycles may have been archived after Meta-Done)
+for f in "$TASKS_DIR"/*.md "$ARCHIVE_DIR"/*.md; do
   [ -f "$f" ] || continue
   total_tasks=$((total_tasks + 1))
   # Count meta-task cycles (tasks that went through Meta-Active)
+  is_cycle=0
   if grep -q 'status: Meta-Active\|status: Meta-Done\|idempotentReconcile:' "$f" 2>/dev/null; then
     meta_task_cycles=$((meta_task_cycles + 1))
+    is_cycle=1
   fi
   while IFS= read -r line; do
     case "$line" in
       *"replan:"*)              replan_events=$((replan_events + 1)) ;;
-      *"evaluator: Met"*)       evaluator_met=$((evaluator_met + 1)) ;;
-      *"evaluator: NotMet"*)    evaluator_not_met=$((evaluator_not_met + 1)) ;;
+      # evaluator counts are restricted to cycle tasks to avoid false positives
+      # from task descriptions / code snippets in non-cycle task files.
+      *"evaluator: Met"*)
+        [ "$is_cycle" -eq 1 ] && evaluator_met=$((evaluator_met + 1)) ;;
+      *"evaluator: NotMet"*)
+        [ "$is_cycle" -eq 1 ] && evaluator_not_met=$((evaluator_not_met + 1)) ;;
     esac
   done < "$f"
 done

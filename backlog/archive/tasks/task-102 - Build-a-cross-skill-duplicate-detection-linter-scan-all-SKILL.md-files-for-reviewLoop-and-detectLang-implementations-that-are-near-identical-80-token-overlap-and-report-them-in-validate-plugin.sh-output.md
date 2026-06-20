@@ -7,6 +7,7 @@ title: >-
 status: Meta-Plan
 assignee: []
 created_date: '2026-06-20 10:26'
+updated_date: '2026-06-20 10:41'
 labels: []
 dependencies: []
 ordinal: 83000
@@ -22,3 +23,9 @@ Rationale: Four sub-tasks: (1) implement token-overlap similarity function in sk
 This meta-task is part of TASK-93 Exp-K experiment corpus (input MT-08).
 Source: plugin/loop-meta/data/task-notes/meta-task-inputs.json
 <!-- SECTION:DESCRIPTION:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Decomposition complete: 4 sub-tasks in Backlog. Review sub-tasks, then set status → Meta-Active to start reconcile loop.
+<!-- SECTION:NOTES:END -->

@@ -3,10 +3,10 @@ id: TASK-93.7
 title: >-
   G2.1: Author ≥10 real meta-task inputs for Exp-K (varying complexity, ≥2
   replan-triggering)
-status: Backlog
+status: Done
 assignee: []
 created_date: '2026-06-20 10:04'
-updated_date: '2026-06-20 10:06'
+updated_date: '2026-06-20 10:21'
 labels: []
 dependencies: []
 parent_task_id: TASK-93
@@ -111,6 +111,39 @@ print('PASS: schema and distribution OK')
 Plan review iteration 1: NEEDS_REVISION — Phase 1 DoD incorrectly referenced the output file before Phase 2 created it. Fixed by merging survey into Phase 1 (authoring phase) and removing the premature DoD check. Plan review iteration 2: APPROVED
 
 parentTask: TASK-93
+
+claimed: 2026-06-20T10:15:00Z
+
+Phase 1 ✓ 2026-06-20T00:00:00Z
+Surveyed loop-meta SKILL.md, identified friction points (reviewLoop exhaustion, ambiguous thresholds, output-format conflicts), surveyed 93+ backlog tasks for real project needs, authored 12 meta-task entries in meta-task-inputs.json covering all distribution requirements.
+
+Phase 2 ✓ 2026-06-20T00:00:00Z
+Validation passed: 12 entries, 2 replan_expected (MT-05, MT-08), 5 with estimated_subtasks==2, 7 with estimated_subtasks>=3, all goals >=20 chars, all replan_expected are bool.
+
+DoD #1: PASS — test -f /home/yale/work/baime/plugin/loop-meta/data/task-notes/meta-task-inputs.json
+
+DoD #2: PASS — test -s /home/yale/work/baime/plugin/loop-meta/data/task-notes/meta-task-inputs.json
+
+DoD #3: PASS — python3 len(entries)>=10 (got 12)
+
+DoD #4: PASS — python3 len([e for e in entries if e['replan_expected']])>=2 (got 2)
+
+DoD #5: PASS — grep -q '"replan_expected"' meta-task-inputs.json
+
+DoD #6: PASS — grep -q '"estimated_subtasks"' meta-task-inputs.json
+
+DoD #7: PASS — bash scripts/validate-plugin.sh → Errors: 0, ALL CHECKS PASSED
+
+## Execution Summary
+Result: Done
+Commit: b2da343 (worktree task/TASK-93.7), 2964f76 (main branch)
+1. Phase 1 ✓: Surveyed loop-meta SKILL.md and backlog; authored 12 meta-task entries
+2. Phase 2 ✓: Schema and distribution validation passed
+3. DoD #1-#7: All PASS
+4. Committed to worktree branch task/TASK-93.7 and main branch
+
+workerLoop DoD verified: all 7 commands passed
+Completed: 2026-06-20T10:22:00Z
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

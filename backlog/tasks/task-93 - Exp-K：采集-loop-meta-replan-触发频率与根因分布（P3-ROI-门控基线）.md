@@ -1,10 +1,10 @@
 ---
 id: TASK-93
 title: Exp-K：采集 loop-meta replan 触发频率与根因分布（P3 ROI 门控基线）
-status: Meta-Plan
+status: Meta-Done
 assignee: []
 created_date: '2026-06-20 07:53'
-updated_date: '2026-06-20 09:50'
+updated_date: '2026-06-20 10:54'
 labels: []
 dependencies: []
 ordinal: 1000
@@ -125,4 +125,38 @@ gateHuman (Meta-Plan review): 5 sub-tasks in Backlog, all carry shell-gate DoDs.
 IMPORTANT: TASK-93.3 is large — it requires running ≥10 real meta-tasks through loop-meta/loop-backlog to Meta-Done. Each such meta-task must have sub-tasks with shell-gate DoDs; no rubber-stamping. This is the core experiment. WIP_CAP=2 means TASK-93.1+93.2 run first, then 93.3+93.4, then 93.5.
 
 To continue: review sub-tasks above, then set status → Meta-Active to start the reconcile loop.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=0 (all Backlog).
+setReady: promoted TASK-93.6, TASK-93.7 (wip=2, WIP_CAP=2)
+
+idempotentReconcile: no gap — all 5 sub-tasks present. wip=2 (TASK-93.6, TASK-93.7 Ready) = WIP_CAP, no further promotion.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=1 (TASK-93.7 In Progress, TASK-93.6 Done).
+evaluateAndReplan: TASK-93.6 Done — dod_slice: PASS (15/15 shell-gates verified by loop-backlog). Guards confirmed operational. Partial verdict: Met (1/5 done).
+setReady: wip=1 < WIP_CAP=2, but remaining Backlog tasks have unmet dependencies (93.10 awaits 93.7, 93.8 awaits 93.10, 93.9 awaits 93.8) — no further promotion possible.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=0 (TASK-93.6, TASK-93.7 Done).
+evaluateAndReplan: TASK-93.6 + TASK-93.7 Done — dod_slice: PASS both. Guards operational (G1 Met); meta-task inputs JSON authored (G2.1 Met). Partial verdict: Met (2/5 done).
+setReady: TASK-93.10 dependency TASK-93.7 now Done → promoting TASK-93.10 (wip=1, WIP_CAP=2). TASK-93.8 awaits 93.10; TASK-93.9 awaits 93.8 — no further promotion.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=0 (TASK-93.6, TASK-93.7 Done).
+setReady: promoted TASK-93.10 (wip=1). TASK-93.8, TASK-93.9 blocked on TASK-93.10 — not promoted.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=0 (TASK-93.6, TASK-93.7, TASK-93.10 Done).
+evaluateAndReplan: TASK-93.10 Done — cycles=13 ≥ 10, check-roi-gate PROCEED. G2 Met.
+setReady: promoted TASK-93.8 (G3, depends on TASK-93.10 now Done). TASK-93.9 blocked on 93.8.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=1 (TASK-93.8 In Progress, 93.6/93.7/93.10 Done).
+evaluateAndReplan: TASK-93.10 Done — G2.2 complete, ≥10 meta-task lifecycles executed. dod_slice: PASS. Partial verdict: Met (3/5 done).
+setReady: TASK-93.9 dependency TASK-93.8 not yet Done — no further promotion.
+
+idempotentReconcile: no gap — all 5 sub-tasks present. Actual wip=0 (TASK-93.6/93.7/93.8/93.10 Done).
+evaluateAndReplan: TASK-93.8 Done — G3 complete, provenance-stamped baseline emitted. dod_slice: PASS. Partial verdict: Met (4/5 done).
+setReady: TASK-93.9 dependency TASK-93.8 now Done → promoting TASK-93.9 (wip=1, WIP_CAP=2).
+
+evaluator: Met | dod_slice: PASS | data_source: measured
+
+evaluateAndReplan: TASK-93.9 Done — all 5 sub-tasks Done, all FAC#1-#6 PASS. Gate: Result: PROCEED (cycles=13 ≥ 10, evaluator Met=13/13). P3→P4 UNLOCKED.
+
+Setting status → Meta-Done. P3 baseline experiment complete.
 <!-- SECTION:NOTES:END -->

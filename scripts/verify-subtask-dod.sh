@@ -15,6 +15,7 @@ set -uo pipefail
 
 META_ID=""
 TASKS_DIR="backlog/tasks"
+ARCHIVE_DIR="backlog/archive/tasks"
 while [ $# -gt 0 ]; do
   case "$1" in
     --tasks-dir) TASKS_DIR="$2"; shift 2 ;;
@@ -42,20 +43,24 @@ hasDod() {
 
 children=0
 offenders=()
-for f in "$TASKS_DIR"/*.md; do
-  [ -f "$f" ] || continue
-  parent="$(grep -oiP '^parent_task_id:\s*\K.+' "$f" 2>/dev/null | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
-  [ "$parent" = "$META_ID" ] || continue
-  children=$((children + 1))
-  cid="$(grep -oiP '^id:\s*\K.+' "$f" 2>/dev/null | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
-  [ -n "$cid" ] || cid="$(basename "$f")"
-  if ! hasDod "$f"; then
-    offenders+=("$cid")
-  fi
+# Scan both active and archive directories (sub-tasks may be archived after completion)
+for scan_dir in "$TASKS_DIR" "$ARCHIVE_DIR"; do
+  [ -d "$scan_dir" ] || continue
+  for f in "$scan_dir"/*.md; do
+    [ -f "$f" ] || continue
+    parent="$(grep -oiP '^parent_task_id:\s*\K.+' "$f" 2>/dev/null | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+    [ "$parent" = "$META_ID" ] || continue
+    children=$((children + 1))
+    cid="$(grep -oiP '^id:\s*\K.+' "$f" 2>/dev/null | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+    [ -n "$cid" ] || cid="$(basename "$f")"
+    if ! hasDod "$f"; then
+      offenders+=("$cid")
+    fi
+  done
 done
 
 if [ "$children" -eq 0 ]; then
-  echo "verify-subtask-dod: no children found for $META_ID in $TASKS_DIR" >&2
+  echo "verify-subtask-dod: no children found for $META_ID in $TASKS_DIR or $ARCHIVE_DIR" >&2
   exit 2
 fi
 
