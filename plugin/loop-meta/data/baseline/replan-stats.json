@@ -9,7 +9,7 @@
     "infeasible": 1
   },
   "evaluator": {
-    "Met": 0,
-    "NotMet": 0
+    "Met": 8,
+    "NotMet": 2
   }
 }
