@@ -226,6 +226,11 @@ listChildren(id) =
 -- unverifiable sub-task.
 createSubTask :: (TaskId, SubTaskSpec) → ()
 createSubTask(parent, spec) = {
+  -- Guard: META_ID must not itself be a child task (2-level hierarchy contract)
+  parentLine: shell("backlog task view " + parent + " --plain | grep -c '^Parent:'"),
+  if parentLine > 0 then
+    escalate(parent, "nestedMetaTask: META_ID " + parent + " is itself a child task; nested Meta→Meta→Task hierarchy is forbidden")
+    return 1,
   child: invoke("task-to-backlog", spec),   -- produces ## Definition of Done with ≥1 shell-gate
   appendNote(child, "parentTask: " + parent),
   setParentTaskId(child, parent),           -- frontmatter parent_task_id for daemon/listChildren
@@ -503,6 +508,14 @@ createSubTask() {
   local TITLE="$2"
   local DESCRIPTION="$3"       # full context for this sub-task
   local PARENT_CONTEXT="$4"    # relevant excerpt from the meta-task's implementation plan
+
+  # Guard: reject nested Meta Tasks (2-level hierarchy contract)
+  PARENT_LINE_COUNT=$(backlog task view "$META_ID" --plain | grep -c '^Parent:' || true)
+  if [ "$PARENT_LINE_COUNT" -gt 0 ]; then
+    backlog task edit "$META_ID" --append-notes "createSubTask: nestedMetaTask — META_ID ${META_ID} is itself a child task; nested Meta→Meta→Task hierarchy is forbidden"
+    backlog task edit "$META_ID" --status "Needs Human"
+    return 1
+  fi
 
   # Invoke task-to-backlog via Agent — produces Backlog task with plan + shell-gate DoD.
   # FORBIDDEN: a bare title-only create with no plan/DoD (rubber-stampable child).
