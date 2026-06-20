@@ -337,13 +337,21 @@ replanner(metaId, notMet) = {
 
 -- evaluateAndReplan: integrate evaluate→replan branch into reconcile.
 -- Triggered only when Meta-Active and at least one child is Done.
+-- Distinguishes partial-done (some pending children remain) from fully-done (no pending children).
 evaluateAndReplan :: TaskId → ()
 evaluateAndReplan(metaId) = {
-  doneChildren: filter(c → status(c) == Done, listChildren(metaId)),
+  doneChildren:    filter(c → status(c) == Done,                        listChildren(metaId)),
+  pendingChildren: filter(c → status(c) ∈ {Backlog, Ready, InProgress}, listChildren(metaId)),
   if (empty(doneChildren)): return,
 
   result: evaluator(metaId, doneChildren),
-  if (result == Met): return,
+
+  if (result == Met AND empty(pendingChildren)):
+    setStatus(metaId, "Meta-Done"),
+    appendNote(metaId, "completionCheck: all children Done, evaluator Met — advancing to Meta-Done"),
+    return,
+
+  if (result == Met): return,   -- partial progress, keep running
 
   -- NotMet: diagnose and replan
   replanResult: replanner(metaId, result),
@@ -618,6 +626,9 @@ Not promoting to Ready until every child carries a shell-gate DoD."
   # Fix-A: always call setReady — unconditional; must compute fresh wip via
   # listChildren, NEVER assume wip from prior context.
   setReady "$META_ID"  # unconditional — promotes Backlog→Ready up to WIP_CAP
+
+  # completionCheck: if all children Done and evaluator Met, advances to Meta-Done
+  evaluateAndReplan "$META_ID"
 }
 ```
 
@@ -802,6 +813,56 @@ setReady() {
           fi
         fi
       done
+}
+```
+
+### evaluateAndReplan
+
+```bash
+evaluateAndReplan() {
+  local META_ID="$1"
+
+  # Partition children into done vs pending
+  local DONE_CHILDREN=()
+  local PENDING_CHILDREN=()
+  while IFS= read -r line; do
+    CHILD_ID=$(echo "$line" | grep -oP 'TASK-[\d.]+' | head -1)
+    [ -z "$CHILD_ID" ] && continue
+    CHILD_STATUS=$(backlog task view "$CHILD_ID" --plain 2>/dev/null | awk '/^Status:/{print $2; exit}')
+    case "$CHILD_STATUS" in
+      Done) DONE_CHILDREN+=("$CHILD_ID") ;;
+      Backlog|Ready|"In Progress") PENDING_CHILDREN+=("$CHILD_ID") ;;
+    esac
+  done < <(backlog task list --plain 2>/dev/null | grep -E "^\s+TASK-" || true)
+
+  # No done children — nothing to evaluate
+  [ "${#DONE_CHILDREN[@]}" -eq 0 ] && return 0
+
+  # dod_aggregate slice (data_source: measured): verify-subtask-dod.sh exits 0 for all children
+  local EVAL_RESULT="Met"
+  if [ -f "scripts/verify-subtask-dod.sh" ]; then
+    if ! bash scripts/verify-subtask-dod.sh "$META_ID" 2>/dev/null; then
+      EVAL_RESULT="NotMet"
+    fi
+  fi
+  backlog task edit "$META_ID" --append-notes "evaluateAndReplan: evaluator verdict=$EVAL_RESULT done=${#DONE_CHILDREN[@]} pending=${#PENDING_CHILDREN[@]}" 2>/dev/null || true
+
+  if [ "$EVAL_RESULT" = "Met" ] && [ "${#PENDING_CHILDREN[@]}" -eq 0 ]; then
+    # All children Done and evaluator Met — advance to Meta-Done
+    backlog task edit "$META_ID" --status "Meta-Done" \
+      --append-notes "completionCheck: all children Done, evaluator Met — advancing to Meta-Done" 2>/dev/null || true
+    return 0
+  fi
+
+  if [ "$EVAL_RESULT" = "Met" ]; then
+    # Partial progress — keep running
+    return 0
+  fi
+
+  # NotMet — escalate
+  backlog task edit "$META_ID" --append-notes "evaluateAndReplan: evaluator NotMet — escalating for replan" 2>/dev/null || true
+  backlog task edit "$META_ID" --status "Needs Human" \
+    --append-notes "Escalated: evaluator NotMet after all-Done check. Review child task quality and replan." 2>/dev/null || true
 }
 ```
 
