@@ -376,7 +376,7 @@ dependency needed.
 
 ```bash
 DAEMON_SCRIPT="${REPO_ROOT}/scripts/basic-daemon.js"
-DAEMON_VERSION="v6"
+DAEMON_VERSION="v7"
 
 NEED_WRITE=true
 if [ -f "$DAEMON_SCRIPT" ]; then
@@ -388,24 +388,31 @@ if [ "$NEED_WRITE" = "true" ]; then
   mkdir -p "${REPO_ROOT}/scripts"
   cat > "$DAEMON_SCRIPT" << 'DAEMON_EOF'
 #!/usr/bin/env node
-// daemon-version: v6
+// daemon-version: v7
 /**
- * basic-daemon.js — polls backlog tasks dir and emits basic-ready events to stdout.
+ * basic-daemon.js — UNIFIED B″ poller. Polls backlog tasks dir and emits three
+ * event channels to stdout:
  *
- * Emits one line per Basic:Ready transition: "basic-ready:TASK-N"
- * Only tasks with kind:basic label AND status "Basic: Ready" are emitted.
- * Excludes tasks with kind:epic label (those go to epic-daemon's channel).
- * Stops on stop-sentinel file or SIGTERM.
+ *   basic-ready:TASK-N   kind:basic AND status "Basic: Ready"   → worker executes task
+ *   epic-ready:TASK-N    kind:epic  AND status "Epic: Ready"    → worker auto-decomposes
+ *   child-done:TASK-N    kind:basic AND status "Basic: Done" AND has parent_task_id
+ *                                                               → worker re-checks parent epic
  *
- * Pure Node.js stdlib — no npm dependencies required.
- * Reads parent_task_id from task frontmatter for notifyParentIfAny hook.
+ * One daemon, one log; the loop-backlog worker dispatches by event prefix. Replaces the
+ * former separate basic-daemon/epic-daemon split. Note: epic-ready fires ONLY for
+ * "Epic: Ready" (the human-authorized state) — Epic: Proposal/Plan are handled by the
+ * interactive epic-to-backlog skill, and Decomposing/Awaiting Children/Evaluating are
+ * driven by the worker (via epic-ready then child-done), not by polling.
+ *
+ * Stops on stop-sentinel file or SIGTERM. Pure Node.js stdlib — no npm dependencies.
  */
 'use strict';
 const fs   = require('fs');
 const path = require('path');
 
-// The status that triggers emission on the basic channel
 const BASIC_READY_STATUS = 'basic: ready';
+const EPIC_READY_STATUS  = 'epic: ready';
+const BASIC_DONE_STATUS  = 'basic: done';
 
 function parseArgs(argv) {
   const args = {
@@ -422,7 +429,7 @@ function parseArgs(argv) {
       case '--interval':   args.interval = parseFloat(argv[++i]); break;
       case '--help': case '-h':
         process.stdout.write(
-          'Usage: basic-daemon.js [options]\n' +
+          'Usage: basic-daemon.js [options]  (unified B″ poller)\n' +
           '  --tasks-dir <path>  Directory of task markdown files (default: backlog/tasks)\n' +
           '  --pid-file  <path>  PID file path (default: backlog/.basic-daemon.pid)\n' +
           '  --stop-file <path>  Stop sentinel path (default: backlog/.loop-stop)\n' +
@@ -452,7 +459,7 @@ function readTaskMeta(filepath) {
     const fm = m[1];
 
     const statusMatch = fm.match(/^status:\s*(.+)$/m);
-    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+    const status = statusMatch ? statusMatch[1].trim().replace(/['"]/g, '').toLowerCase() : null;
 
     const parentMatch = content.match(/^parent_task_id:\s*(.+)$/m);
     const parent_task_id = parentMatch ? parentMatch[1].trim().toUpperCase() : null;
@@ -467,7 +474,7 @@ function readTaskMeta(filepath) {
       const blockMatch = fm.match(/^labels:\s*\n((?:  - .+\n?)*)/m);
       if (blockMatch) {
         labels = blockMatch[1].split('\n')
-          .map(l => l.replace(/^\s+-\s+/, '').trim())
+          .map(l => l.replace(/^\s+-\s+/, '').trim().replace(/['"]/g, ''))
           .filter(Boolean);
       }
     }
@@ -483,21 +490,37 @@ function readTaskMeta(filepath) {
 function isBasicReady(filepath) {
   const meta = readTaskMeta(filepath);
   if (!meta) return false;
-  // Must have kind:basic label and NOT kind:epic, and status must be "Basic: Ready"
   return meta.hasKindBasic && !meta.hasKindEpic && meta.status === BASIC_READY_STATUS;
 }
 
-function scanBasicReadyIds(tasksDir) {
-  const ready = new Set();
+function isEpicReady(filepath) {
+  const meta = readTaskMeta(filepath);
+  if (!meta) return false;
+  return meta.hasKindEpic && !meta.hasKindBasic && meta.status === EPIC_READY_STATUS;
+}
+
+function isChildDone(filepath) {
+  const meta = readTaskMeta(filepath);
+  if (!meta) return false;
+  return meta.hasKindBasic && !meta.hasKindEpic
+      && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id;
+}
+
+// Scan tasksDir, returning a Set of IDs for which predicate(filepath) is true.
+function scanIds(tasksDir, predicate) {
+  const out = new Set();
   let entries;
-  try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
+  try { entries = fs.readdirSync(tasksDir); } catch { return out; }
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue;
     const id = parseTaskId(entry);
-    if (id && isBasicReady(path.join(tasksDir, entry))) ready.add(id);
+    if (id && predicate(path.join(tasksDir, entry))) out.add(id);
   }
-  return ready;
+  return out;
 }
+
+// Backward-compatible alias used by the embedded self-test.
+function scanBasicReadyIds(tasksDir) { return scanIds(tasksDir, isBasicReady); }
 
 const args       = parseArgs(process.argv);
 const intervalMs = Math.round(args.interval * 1000);
@@ -511,21 +534,25 @@ process.on('exit',    removePid);
 process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT',  () => process.exit(0));
 
-const notified = new Set(); // IDs we have already emitted basic-ready for
+// One notified set per channel; emit a given id once until it leaves the trigger state.
+const channels = [
+  { prefix: 'basic-ready', predicate: isBasicReady, notified: new Set() },
+  { prefix: 'epic-ready',  predicate: isEpicReady,  notified: new Set() },
+  { prefix: 'child-done',  predicate: isChildDone,  notified: new Set() },
+];
 
 const timer = setInterval(() => {
   if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
 
-  // Basic channel: emit basic-ready for kind:basic tasks at Basic: Ready
-  const readyIds = scanBasicReadyIds(args.tasksDir);
-
-  // Evict IDs that are no longer in ready state
-  for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
-
-  // Emit new ready IDs (sorted for determinism)
-  for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
-    process.stdout.write(`basic-ready:${id}\n`);
-    notified.add(id);
+  for (const ch of channels) {
+    const ids = scanIds(args.tasksDir, ch.predicate);
+    // Evict IDs no longer in the trigger state (allows re-emit on a future re-entry)
+    for (const id of ch.notified) { if (!ids.has(id)) ch.notified.delete(id); }
+    // Emit new IDs (sorted for determinism)
+    for (const id of [...ids].filter(id => !ch.notified.has(id)).sort()) {
+      process.stdout.write(`${ch.prefix}:${id}\n`);
+      ch.notified.add(id);
+    }
   }
 }, intervalMs);
 DAEMON_EOF

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * daemon-routing.test.js — Deterministic routing unit tests for basic-daemon.js and epic-daemon.js.
+ * daemon-routing.test.js — Deterministic routing unit tests for the UNIFIED basic-daemon.js.
  *
- * Creates temp task files with various kind/status combinations and verifies:
- * 1. kind:basic + Basic: Ready → basic-ready only (no epic-ready)
- * 2. kind:epic + Epic: Proposal → epic-ready only (no basic-ready)
- * 3. No cross-channel emission
- * 4. parent_task_id is readable from task frontmatter
- * 5. daemon-version: v6 in both daemon files
+ * The unified B″ poller emits three channels:
+ *   basic-ready  kind:basic AND Basic: Ready
+ *   epic-ready   kind:epic  AND Epic: Ready          (ONLY Epic: Ready — not other Epic:* states)
+ *   child-done   kind:basic AND Basic: Done AND has parent_task_id
+ *
+ * Verifies correct routing, no cross-channel emission, parent_task_id parsing, and that
+ * scripts/basic-daemon.js carries daemon-version: v7 and wires all three channels.
  *
  * Exits 0 on all pass, non-zero on fail.
  */
@@ -16,13 +17,11 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-// ── Routing logic (inlined from daemons to allow deterministic test without running processes) ──
+// ── Routing logic (inlined from the unified daemon for deterministic, process-free tests) ──
 
 const BASIC_READY_STATUS = 'basic: ready';
-const EPIC_READY_STATUSES = new Set([
-  'epic: proposal', 'epic: plan', 'epic: decomposing',
-  'epic: awaiting children', 'epic: evaluating',
-]);
+const EPIC_READY_STATUS  = 'epic: ready';
+const BASIC_DONE_STATUS  = 'basic: done';
 
 function parseLabels(fm) {
   let labels = [];
@@ -33,7 +32,7 @@ function parseLabels(fm) {
     const blockMatch = fm.match(/^labels:\s*\n((?:  - .+\n?)*)/m);
     if (blockMatch) {
       labels = blockMatch[1].split('\n')
-        .map(l => l.replace(/^\s+-\s+/, '').trim())
+        .map(l => l.replace(/^\s+-\s+/, '').trim().replace(/['"]/g, ''))
         .filter(Boolean);
     }
   }
@@ -47,7 +46,7 @@ function readTaskMeta(filepath) {
     if (!m) return null;
     const fm = m[1];
     const statusMatch = fm.match(/^status:\s*(.+)$/m);
-    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+    const status = statusMatch ? statusMatch[1].trim().replace(/['"]/g, '').toLowerCase() : null;
     const parentMatch = content.match(/^parent_task_id:\s*(.+)$/m);
     const parent_task_id = parentMatch ? parentMatch[1].trim().toUpperCase() : null;
     const labels = parseLabels(fm);
@@ -70,7 +69,14 @@ function isBasicReady(filepath) {
 function isEpicReady(filepath) {
   const meta = readTaskMeta(filepath);
   if (!meta) return false;
-  return meta.hasKindEpic && !meta.hasKindBasic && EPIC_READY_STATUSES.has(meta.status);
+  return meta.hasKindEpic && !meta.hasKindBasic && meta.status === EPIC_READY_STATUS;
+}
+
+function isChildDone(filepath) {
+  const meta = readTaskMeta(filepath);
+  if (!meta) return false;
+  return meta.hasKindBasic && !meta.hasKindEpic
+      && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id;
 }
 
 // ── Test helpers ──
@@ -79,13 +85,8 @@ let passed = 0;
 let failed = 0;
 
 function assert(condition, message) {
-  if (condition) {
-    console.log(`  PASS: ${message}`);
-    passed++;
-  } else {
-    console.log(`  FAIL: ${message}`);
-    failed++;
-  }
+  if (condition) { console.log(`  PASS: ${message}`); passed++; }
+  else           { console.log(`  FAIL: ${message}`); failed++; }
 }
 
 function makeTaskFile(dir, id, status, labels, parentId = null) {
@@ -94,7 +95,7 @@ function makeTaskFile(dir, id, status, labels, parentId = null) {
     : `labels:\n${labels.map(l => `  - ${l}`).join('\n')}`;
   const parentLine = parentId ? `parent_task_id: ${parentId}\n` : '';
   const content = `---\nid: ${id}\ntitle: Test task ${id}\nstatus: ${status}\nassignee: []\ncreated_date: '2026-06-21'\nupdated_date: '2026-06-21'\n${labelsYaml}\ndependencies: []\n${parentLine}ordinal: 1000\n---\n\n## Description\n\nTest task.\n`;
-  const filename = `${id.toLowerCase().replace('-', '-')} - Test-task-${id}.md`;
+  const filename = `${id.toLowerCase()} - Test-task-${id}.md`;
   fs.writeFileSync(path.join(dir, filename), content);
   return path.join(dir, filename);
 }
@@ -104,129 +105,106 @@ function makeTaskFile(dir, id, status, labels, parentId = null) {
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-routing-test-'));
 
 try {
-  console.log('\n=== daemon-routing.test.js ===\n');
+  console.log('\n=== daemon-routing.test.js (unified daemon) ===\n');
 
-  // Test 1: kind:basic + Basic: Ready → basic-ready channel only
+  // Test 1: kind:basic + Basic: Ready → basic-ready only
   {
-    const filepath = makeTaskFile(tmpDir, 'TASK-1', 'Basic: Ready', ['kind:basic'], 'TASK-99');
-    assert(isBasicReady(filepath) === true,  'Test 1a: kind:basic + Basic: Ready → isBasicReady = true');
-    assert(isEpicReady(filepath)  === false, 'Test 1b: kind:basic + Basic: Ready → isEpicReady = false (no cross-channel)');
+    const f = makeTaskFile(tmpDir, 'TASK-1', 'Basic: Ready', ['kind:basic'], 'TASK-99');
+    assert(isBasicReady(f) === true,  'Test 1a: kind:basic + Basic: Ready → basic-ready');
+    assert(isEpicReady(f)  === false, 'Test 1b: kind:basic + Basic: Ready → no epic-ready');
+    assert(isChildDone(f)  === false, 'Test 1c: Basic: Ready (not Done) → no child-done');
   }
 
-  // Test 2: kind:epic + Epic: Proposal → epic-ready channel only
+  // Test 2: kind:epic + Epic: Ready → epic-ready only
   {
-    const filepath = makeTaskFile(tmpDir, 'TASK-2', 'Epic: Proposal', ['kind:epic']);
-    assert(isEpicReady(filepath)  === true,  'Test 2a: kind:epic + Epic: Proposal → isEpicReady = true');
-    assert(isBasicReady(filepath) === false, 'Test 2b: kind:epic + Epic: Proposal → isBasicReady = false (no cross-channel)');
+    const f = makeTaskFile(tmpDir, 'TASK-2', 'Epic: Ready', ['kind:epic']);
+    assert(isEpicReady(f)  === true,  'Test 2a: kind:epic + Epic: Ready → epic-ready');
+    assert(isBasicReady(f) === false, 'Test 2b: kind:epic + Epic: Ready → no basic-ready');
   }
 
-  // Test 3: kind:epic + all other active Epic:* statuses emit epic-ready
+  // Test 3: kind:epic + non-Ready Epic:* statuses do NOT emit epic-ready
+  //         (handled by epic-to-backlog interactively, or by worker via child-done)
   {
-    const epicStatuses = [
-      'Epic: Plan', 'Epic: Decomposing', 'Epic: Awaiting Children', 'Epic: Evaluating'
-    ];
-    for (const status of epicStatuses) {
+    const nonReady = ['Epic: Proposal', 'Epic: Plan', 'Epic: Backlog',
+                      'Epic: Decomposing', 'Epic: Awaiting Children', 'Epic: Evaluating'];
+    for (const status of nonReady) {
       const id = `TASK-3-${status.replace(/[^A-Za-z]/g, '')}`;
-      const filepath = makeTaskFile(tmpDir, id, status, ['kind:epic']);
-      assert(isEpicReady(filepath) === true, `Test 3: kind:epic + "${status}" → isEpicReady = true`);
-      assert(isBasicReady(filepath) === false, `Test 3: kind:epic + "${status}" → isBasicReady = false`);
+      const f = makeTaskFile(tmpDir, id, status, ['kind:epic']);
+      assert(isEpicReady(f) === false, `Test 3: kind:epic + "${status}" → no epic-ready (only Epic: Ready emits)`);
     }
   }
 
-  // Test 4: kind:epic + terminal statuses do NOT emit
+  // Test 4: kind:epic terminal statuses do NOT emit
   {
     for (const status of ['Epic: Done', 'Epic: Needs Human']) {
       const id = `TASK-4-${status.replace(/[^A-Za-z]/g, '')}`;
-      const filepath = makeTaskFile(tmpDir, id, status, ['kind:epic']);
-      assert(isEpicReady(filepath) === false,  `Test 4: kind:epic + "${status}" → terminal, no epic-ready`);
-      assert(isBasicReady(filepath) === false,  `Test 4: kind:epic + "${status}" → terminal, no basic-ready`);
+      const f = makeTaskFile(tmpDir, id, status, ['kind:epic']);
+      assert(isEpicReady(f) === false, `Test 4: kind:epic + "${status}" → terminal, no epic-ready`);
     }
   }
 
-  // Test 5: kind:basic + non-Ready statuses do NOT emit
+  // Test 5: child-done channel — kind:basic + Basic: Done + parent_task_id
   {
-    for (const status of ['Basic: Backlog', 'Basic: Proposal', 'Basic: Done', 'Basic: In Progress']) {
-      const id = `TASK-5-${status.replace(/[^A-Za-z]/g, '')}`;
-      const filepath = makeTaskFile(tmpDir, id, status, ['kind:basic']);
-      assert(isBasicReady(filepath) === false, `Test 5: kind:basic + "${status}" → not ready, no basic-ready`);
-      assert(isEpicReady(filepath)  === false, `Test 5: kind:basic + "${status}" → no epic-ready`);
+    const withParent = makeTaskFile(tmpDir, 'TASK-5', 'Basic: Done', ['kind:basic'], 'TASK-50');
+    assert(isChildDone(withParent) === true,  'Test 5a: kind:basic + Basic: Done + parent → child-done');
+    assert(isBasicReady(withParent) === false, 'Test 5b: Basic: Done → no basic-ready');
+
+    const noParent = makeTaskFile(tmpDir, 'TASK-5N', 'Basic: Done', ['kind:basic']);
+    assert(isChildDone(noParent) === false, 'Test 5c: Basic: Done WITHOUT parent → no child-done');
+
+    const epicDone = makeTaskFile(tmpDir, 'TASK-5E', 'Epic: Done', ['kind:epic'], 'TASK-50');
+    assert(isChildDone(epicDone) === false, 'Test 5d: kind:epic Done → no child-done (basic channel only)');
+  }
+
+  // Test 6: kind:basic non-Ready/non-Done statuses → no emission on any channel
+  {
+    for (const status of ['Basic: Backlog', 'Basic: Proposal', 'Basic: In Progress']) {
+      const id = `TASK-6-${status.replace(/[^A-Za-z]/g, '')}`;
+      const f = makeTaskFile(tmpDir, id, status, ['kind:basic'], 'TASK-60');
+      assert(isBasicReady(f) === false, `Test 6: kind:basic + "${status}" → no basic-ready`);
+      assert(isChildDone(f)  === false, `Test 6: kind:basic + "${status}" → no child-done`);
     }
   }
 
-  // Test 6: task with both kind:basic AND kind:epic → neither channel (XOR violation)
+  // Test 7: XOR violation (both kind labels) and missing kind → neither channel
   {
-    const filepath = makeTaskFile(tmpDir, 'TASK-6', 'Basic: Ready', ['kind:basic', 'kind:epic']);
-    assert(isBasicReady(filepath) === false, 'Test 6: both kind:basic+kind:epic → no basic-ready (XOR violation)');
-    assert(isEpicReady(filepath)  === false, 'Test 6: both kind:basic+kind:epic → no epic-ready (XOR violation)');
+    const both = makeTaskFile(tmpDir, 'TASK-7', 'Basic: Ready', ['kind:basic', 'kind:epic']);
+    assert(isBasicReady(both) === false, 'Test 7a: both kind labels → no basic-ready');
+    assert(isEpicReady(both)  === false, 'Test 7b: both kind labels → no epic-ready');
+    const none = makeTaskFile(tmpDir, 'TASK-7N', 'Basic: Ready', []);
+    assert(isBasicReady(none) === false, 'Test 7c: no kind label → no basic-ready');
   }
 
-  // Test 7: task with no kind label → neither channel
+  // Test 8: parent_task_id is parseable from frontmatter
   {
-    const filepath = makeTaskFile(tmpDir, 'TASK-7', 'Basic: Ready', []);
-    assert(isBasicReady(filepath) === false, 'Test 7: no kind label → no basic-ready');
-    assert(isEpicReady(filepath)  === false, 'Test 7: no kind label → no epic-ready');
-  }
-
-  // Test 8: parent_task_id is parseable from task frontmatter
-  {
-    const filepath = makeTaskFile(tmpDir, 'TASK-8', 'Basic: Ready', ['kind:basic'], 'TASK-42');
-    const meta = readTaskMeta(filepath);
-    assert(meta !== null, 'Test 8a: readTaskMeta succeeds for task with parent_task_id');
+    const f = makeTaskFile(tmpDir, 'TASK-8', 'Basic: Ready', ['kind:basic'], 'TASK-42');
+    const meta = readTaskMeta(f);
+    assert(meta !== null, 'Test 8a: readTaskMeta succeeds');
     assert(meta.parent_task_id === 'TASK-42', 'Test 8b: parent_task_id reads correctly');
   }
 
-  // Test 9: daemon files exist with daemon-version: v6
+  // Test 9: unified daemon file carries daemon-version: v7 and wires all three channels
   {
-    const scriptDir = path.join(__dirname);
-    const basicDaemon = path.join(scriptDir, 'basic-daemon.js');
-    const epicDaemon  = path.join(scriptDir, 'epic-daemon.js');
-
-    assert(fs.existsSync(basicDaemon), 'Test 9a: scripts/basic-daemon.js exists');
-    assert(fs.existsSync(epicDaemon),  'Test 9b: scripts/epic-daemon.js exists');
-
-    if (fs.existsSync(basicDaemon)) {
-      const head = fs.readFileSync(basicDaemon, 'utf8').slice(0, 200);
-      assert(head.includes('daemon-version: v6'), 'Test 9c: basic-daemon.js has daemon-version: v6');
-    }
-    if (fs.existsSync(epicDaemon)) {
-      const head = fs.readFileSync(epicDaemon, 'utf8').slice(0, 200);
-      assert(head.includes('daemon-version: v6'), 'Test 9d: epic-daemon.js has daemon-version: v6');
-    }
-  }
-
-  // Test 10: basic-daemon.js contains 'basic-ready' and 'parent_task_id'
-  {
-    const basicDaemon = path.join(__dirname, 'basic-daemon.js');
-    if (fs.existsSync(basicDaemon)) {
-      const content = fs.readFileSync(basicDaemon, 'utf8');
-      assert(content.includes('basic-ready'), 'Test 10a: basic-daemon.js emits basic-ready');
-      assert(content.includes('parent_task_id'), 'Test 10b: basic-daemon.js reads parent_task_id');
-    }
-  }
-
-  // Test 11: epic-daemon.js contains 'epic-ready'
-  {
-    const epicDaemon = path.join(__dirname, 'epic-daemon.js');
-    if (fs.existsSync(epicDaemon)) {
-      const content = fs.readFileSync(epicDaemon, 'utf8');
-      assert(content.includes('epic-ready'), 'Test 11: epic-daemon.js emits epic-ready');
+    const daemon = path.join(__dirname, 'basic-daemon.js');
+    assert(fs.existsSync(daemon), 'Test 9a: scripts/basic-daemon.js exists');
+    if (fs.existsSync(daemon)) {
+      const content = fs.readFileSync(daemon, 'utf8');
+      assert(content.slice(0, 200).includes('daemon-version: v7'), 'Test 9b: basic-daemon.js has daemon-version: v7');
+      assert(content.includes('basic-ready'),    'Test 9c: emits basic-ready');
+      assert(content.includes('epic-ready'),     'Test 9d: emits epic-ready');
+      assert(content.includes('child-done'),     'Test 9e: emits child-done');
+      assert(content.includes('parent_task_id'), 'Test 9f: reads parent_task_id');
     }
   }
 
   console.log(`\n=== Summary: ${passed} passed, ${failed} failed ===\n`);
-
-  if (failed > 0) {
-    process.exit(1);
-  }
+  if (failed > 0) process.exit(1);
 
 } finally {
-  // Cleanup temp dir
   try {
-    for (const f of fs.readdirSync(tmpDir)) {
-      fs.unlinkSync(path.join(tmpDir, f));
-    }
+    for (const f of fs.readdirSync(tmpDir)) fs.unlinkSync(path.join(tmpDir, f));
     fs.rmdirSync(tmpDir);
-  } catch { /* ignore cleanup errors */ }
+  } catch { /* ignore */ }
 }
 
 process.exit(0);

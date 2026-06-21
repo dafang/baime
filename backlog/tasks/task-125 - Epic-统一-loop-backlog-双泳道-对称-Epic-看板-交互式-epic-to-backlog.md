@@ -4,7 +4,7 @@ title: 'Epic: 统一 loop-backlog 双泳道 + 对称 Epic 看板 + 交互式 epi
 status: 'Epic: Awaiting Children'
 assignee: []
 created_date: '2026-06-21 10:18'
-updated_date: '2026-06-21 10:30'
+updated_date: '2026-06-21 10:46'
 labels:
   - 'kind:epic'
 dependencies: []
@@ -128,4 +128,6 @@ cap:decompose=done child_ids:[TASK-125.1..125.7]
 epicDecompose: 7 kind:basic children at Basic: Backlog, R1 DoD-gate PASS. 等待人工选择执行(促 Basic: Ready)。
 
 epicAwaitChildren: done=2/7 (125.1, 125.3) reconcileRunCount=1 — 低风险打底批完成,等待人工选择后续(125.2/4/5/6/7)。
+
+epicAwaitChildren: done=4/7 (125.1,125.2,125.3,125.4) reconcileRunCount=2 — 剩 125.5(worker 增 epic 分发)→125.6(删 loop-meta)→125.7(冒烟)。
 <!-- SECTION:NOTES:END -->
