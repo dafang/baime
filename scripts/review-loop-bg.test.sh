@@ -9,4 +9,6 @@ check "ftb writes awaiting-plan marker"    "grep -q 'ftb-awaiting-plan' plugin/s
 check "ftb writes awaiting-backlog marker" "grep -q 'ftb-awaiting-backlog' plugin/skills/feature-to-backlog/SKILL.md"
 check "ftb no auto Phase 3 advance"        "! grep -q 'APPROVED.*proceed to Phase 3' plugin/skills/feature-to-backlog/SKILL.md"
 check "ftb no auto Phase 5 advance"        "! grep -q 'APPROVED.*proceed to Phase 5' plugin/skills/feature-to-backlog/SKILL.md"
+check "decomposer uses feature-to-backlog" "grep -q 'feature-to-backlog' plugin/skills/loop-backlog/SKILL.md"
+check "decomposer no raw task create in DECOMP" "! grep -v 'never\|NEVER' plugin/skills/loop-backlog/SKILL.md | grep -q 'backlog task create'"
 echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

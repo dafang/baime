@@ -145,8 +145,9 @@ epicDecompose(id) = {
 -- 2. Write cap:decompose=started.
 -- 3. setStatus(id, "Epic: Decomposing").
 -- 4. Read Sub-Task Decomposition from epic plan.
--- 5. ∀t ∈ subs: createSubTask(id, t) via /task-to-backlog (kind:basic, Basic: Backlog,
---    parent_task_id:id, shell-gate DoD).
+-- 5. ∀t ∈ subs: createSubTask(id, t) via feature-to-backlog (code-change tasks) or
+--    task-to-backlog (doc/config/research-only tasks) — never raw backlog task create.
+--    (kind:basic, parent_task_id:id, shell-gate DoD).
 -- 6. R1 guard: verifySubTaskDod(id).
 -- 7. On R1 pass: appendNote(id, "cap:decompose=done") + setStatus(id, "Epic: Awaiting Children").
 -- 8. On R1 fail or any error: escalateEpic(id, reason, "cap:decompose=failed|<reason>")
@@ -217,20 +218,28 @@ startFinalise :: TaskId → ()
 startFinalise(id) = Agent(run_in_background=true, prompt=finalisePrompt(id))
 
 -- decomposer: subagent that reads the epic plan's Sub-Task Decomposition and returns a
--- canonical [SubTaskSpec]. Each child is created via task-to-backlog so it carries a
--- shell-gate DoD (no rubber-stampable children — TASK-93 R1). Moved here from loop-meta.
+-- canonical [SubTaskSpec]. Each child is created via feature-to-backlog (code-change tasks)
+-- or task-to-backlog (doc/config/research-only tasks) — never raw backlog task create.
+-- Selection rule: isCodeChangeTask ≡ child creates or modifies files under plugin/, scripts/,
+-- or any non-docs git-tracked path. Children park at Basic: Proposal after creation.
 decomposer :: (TaskId, PlanText) → [SubTaskSpec]
 decomposer(id, plan) = Agent(prompt=decomposerPrompt(id, plan), schema=SubTaskListSchema)
 
--- createSubTask: create one kind:basic child at Basic: Backlog with parent_task_id:id,
--- delegating to task-to-backlog so it has a multi-phase plan + shell-gate DoD.
+-- isCodeChangeTask: true when spec involves creating or modifying files under plugin/,
+-- scripts/, or other code/config paths (not exclusively docs/ or backlog/ prose).
+isCodeChangeTask :: SubTaskSpec → Bool
+isCodeChangeTask(spec) = spec.touchesSourceFiles  -- plugin/, scripts/, *.sh, SKILL.md, etc.
+
+-- createSubTask: create one kind:basic child at Basic: Proposal with parent_task_id:parent,
+-- delegating to feature-to-backlog (code-change) or task-to-backlog (doc/config-only)
+-- so it carries a multi-phase plan + shell-gate DoD (TASK-93 R1).
 createSubTask :: (TaskId, SubTaskSpec) → ()
 createSubTask(parent, spec) = {
-  child: invoke("task-to-backlog", spec),   -- produces ## Definition of Done with ≥1 shell-gate
+  skill: if (isCodeChangeTask(spec)): "feature-to-backlog" else: "task-to-backlog",
+  child: invoke(skill, spec.title),
   setLabel(child, "kind:basic"),
-  setParentTaskId(child, parent),           -- frontmatter parent_task_id for daemon/childrenOf
-  setStatus(child, "Basic: Backlog"),       -- NOT Ready — human promotes selected children
-  assert: hasDod(child)                      -- enforced by verify-subtask-dod.sh
+  setParentTaskId(child, parent),
+  assert: hasDod(child)
 }
 
 -- verifySubTaskDod: R1 guard — every child of the epic carries a shell-gate DoD.
@@ -1475,11 +1484,20 @@ STEP 4 — Read Sub-Task Decomposition:
   section. Parse each intended child sub-task from that section.
 
 STEP 5 — Create children:
-  For EACH intended child sub-task, invoke /task-to-backlog to create a kind:basic backlog
-  task with a multi-phase plan and shell-gate DoD. For each created child:
-    - set label kind:basic
-    - set frontmatter parent_task_id: ${EPIC_ID}
-    - set status "Basic: Backlog"  (NOT Ready — the human promotes chosen children)
+  4. Create each child sub-task using the correct skill (do NOT create children directly via CLI):
+
+   Determine for each child whether it is a CODE-CHANGE task or DOC-ONLY task:
+   - CODE-CHANGE: creates or modifies files under plugin/, scripts/, any SKILL.md, *.sh scripts
+   - DOC-ONLY: scope is exclusively reading, researching, writing prose docs, updating backlog notes
+
+   For CODE-CHANGE children: run the /feature-to-backlog skill with the child title
+   For DOC-ONLY children:    run the /task-to-backlog skill with the child title
+
+   After each skill creates the child and returns its TASK-ID:
+   - Set parent: backlog task edit <CHILD_ID> --set-field parent_task_id ${EPIC_ID}
+   - Set label:  backlog task edit <CHILD_ID> --label kind:basic
+   - Do NOT set status to Basic: Ready — leave children at their created status
+
   Do not create children that already exist (idempotent). Record all created TASK-ids.
 
 STEP 6 — R1 guard (verify every child has a shell-gate DoD):
