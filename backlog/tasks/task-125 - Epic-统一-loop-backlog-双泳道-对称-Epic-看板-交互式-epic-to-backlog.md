@@ -4,7 +4,7 @@ title: 'Epic: 统一 loop-backlog 双泳道 + 对称 Epic 看板 + 交互式 epi
 status: 'Epic: Awaiting Children'
 assignee: []
 created_date: '2026-06-21 10:18'
-updated_date: '2026-06-21 10:53'
+updated_date: '2026-06-21 10:57'
 labels:
   - 'kind:epic'
 dependencies: []
@@ -132,4 +132,6 @@ epicAwaitChildren: done=2/7 (125.1, 125.3) reconcileRunCount=1 — 低风险打�
 epicAwaitChildren: done=4/7 (125.1,125.2,125.3,125.4) reconcileRunCount=2 — 剩 125.5(worker 增 epic 分发)→125.6(删 loop-meta)→125.7(冒烟)。
 
 epicAwaitChildren: done=5/7 reconcileRunCount=3 — 核心 worker 集成完成。剩 125.6(删 loop-meta)→125.7(冒烟)。
+
+epicAwaitChildren: done=6/7 — loop-meta 已删除,legacy meta lane 退役。剩 125.7(端到端冒烟)。
 <!-- SECTION:NOTES:END -->

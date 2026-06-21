@@ -141,7 +141,7 @@ echo ""
 echo "=== Count Assertions ==="
 
 EXPECTED_AGENTS=4
-EXPECTED_SKILLS=26
+EXPECTED_SKILLS=25
 
 if [ "$AGENT_COUNT" -eq "$EXPECTED_AGENTS" ]; then
     pass "Agent count: $AGENT_COUNT (expected $EXPECTED_AGENTS)"
@@ -754,7 +754,7 @@ valid = {f"{lane}: {col}"
          for col in ("Proposal", "Plan", "Backlog", "Ready", "In Progress",
                      "Done", "Needs Human", "Decomposing", "Awaiting Children",
                      "Evaluating")}
-WORKER_SKILLS = ("loop-backlog", "loop-meta", "epic-to-backlog",
+WORKER_SKILLS = ("loop-backlog", "epic-to-backlog",
                  "feature-to-backlog", "task-to-backlog", "task-from-template")
 bad = []
 for f in [g for g in glob.glob(os.path.join(root, "plugin/skills/*/SKILL.md"))

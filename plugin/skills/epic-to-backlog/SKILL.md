@@ -493,9 +493,10 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 > 确认无误后，将 epic 推进到 Epic: Ready 以授权自主分解：
 >   backlog task edit <TASK_ID> --status "Epic: Ready"
 >
-> 之后自主 epic worker（epic-daemon + loop-meta）会接管：
+> 之后统一的 loop-backlog worker（basic-daemon 在 Epic: Ready 时发 epic-ready 事件）会接管：
 >   Epic: Ready → Epic: Decomposing → Epic: Awaiting Children →
->   Epic: Evaluating → Epic: Done | Epic: Needs Human
+>   Epic: Evaluating（写 FINISH/ITERATE 建议，软停等你确认）→ Epic: Done | Epic: Needs Human
+> 子任务建在 Basic: Backlog；由你提升选中的子任务到 Basic: Ready 来执行。
 > ```
 
 ---

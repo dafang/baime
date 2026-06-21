@@ -16,9 +16,10 @@ CHECK_MODE=0
 [ "${1:-}" = "--check" ] && CHECK_MODE=1
 
 # daemon name | pid file | log file | restart command
+# Unified B″ poller (basic-daemon.js) emits all three channels (basic-ready / epic-ready /
+# child-done); the former separate epic-daemon was removed in the unified-worker refactor.
 DAEMONS=(
-  "basic|${BACKLOG_DIR}/.basic-daemon.pid|${BACKLOG_DIR}/.basic-daemon.log|node scripts/basic-daemon.js"
-  "epic|${BACKLOG_DIR}/.epic-daemon.pid|${BACKLOG_DIR}/.epic-daemon.log|node scripts/epic-daemon.js"
+  "unified|${BACKLOG_DIR}/.basic-daemon.pid|${BACKLOG_DIR}/.basic-daemon.log|node scripts/basic-daemon.js"
 )
 
 STALE_FOUND=0
