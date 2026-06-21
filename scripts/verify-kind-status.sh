@@ -98,7 +98,7 @@ if inline:
             labels.add(item)
 else:
     block = re.findall(r'^  -\s+(.+)$', fm, re.MULTILINE)
-    labels = set(b.strip() for b in block)
+    labels = set(b.strip().strip('"\'') for b in block)
 
 has_basic = 'kind:basic' in labels
 has_epic = 'kind:epic' in labels

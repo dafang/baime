@@ -674,7 +674,7 @@ draftDecomposition() {
 
   # 3. DoD gate: every child MUST carry a shell-gate DoD (R1 — no rubber-stampable children)
   if ! verifySubTaskDod "$META_ID"; then
-    backlog task edit "$META_ID" --status "Needs Human" --append-notes \
+    backlog task edit "$META_ID" --status "Epic: Needs Human" --append-notes \
       "Escalated: draftDecomposition produced DoD-less sub-task(s). \
 See verify-subtask-dod.sh output. Fix sub-task DoD before setting Meta-Active."
     return 1
@@ -714,7 +714,7 @@ createSubTask() {
   PARENT_LINE_COUNT=$(backlog task view "$META_ID" --plain | grep -c '^Parent:' || true)
   if [ "$PARENT_LINE_COUNT" -gt 0 ]; then
     backlog task edit "$META_ID" --append-notes "createSubTask: nestedMetaTask — META_ID ${META_ID} is itself a child task; nested Meta→Meta→Task hierarchy is forbidden"
-    backlog task edit "$META_ID" --status "Needs Human"
+    backlog task edit "$META_ID" --status "Epic: Needs Human"
     return 1
   fi
 
@@ -810,7 +810,7 @@ idempotentReconcile() {
   # R1 DoD gate: refuse to promote a DoD-less (rubber-stampable) child to Ready.
   # Must pass before setReady — a child with no shell-gate cannot be verified by loop-backlog.
   if ! verifySubTaskDod "$META_ID"; then
-    backlog task edit "$META_ID" --status "Needs Human" --append-notes \
+    backlog task edit "$META_ID" --status "Epic: Needs Human" --append-notes \
       "Escalated: idempotentReconcile found DoD-less sub-task(s) — see verify-subtask-dod.sh. \
 Not promoting to Ready until every child carries a shell-gate DoD."
     return 1
@@ -969,7 +969,7 @@ setReady() {
             done | wc -l)
             if [ "$CURRENT_WIP" -lt "$WIP_CAP" ]; then
               TITLE=$(echo "$NOTE" | grep -oP '(?<=Task TASK-\d+ - ).+' | head -1)
-              backlog task edit "$TID" --status "Ready"
+              backlog task edit "$TID" --status "Basic: Ready"
               backlog task edit "$META_ID" --append-notes "setReady: promoted ${TITLE}"
             fi
           fi
@@ -1011,7 +1011,7 @@ evaluateAndReplan() {
 
   if [ "$EVAL_RESULT" = "Met" ] && [ "${#PENDING_CHILDREN[@]}" -eq 0 ]; then
     # All children Done and evaluator Met — advance to Meta-Done
-    backlog task edit "$META_ID" --status "Meta-Done" \
+    backlog task edit "$META_ID" --status "Epic: Done" \
       --append-notes "completionCheck: all children Done, evaluator Met — advancing to Meta-Done" 2>/dev/null || true
     return 0
   fi
@@ -1023,7 +1023,7 @@ evaluateAndReplan() {
 
   # NotMet — escalate
   backlog task edit "$META_ID" --append-notes "evaluateAndReplan: evaluator NotMet — escalating for replan" 2>/dev/null || true
-  backlog task edit "$META_ID" --status "Needs Human" \
+  backlog task edit "$META_ID" --status "Epic: Needs Human" \
     --append-notes "Escalated: evaluator NotMet after all-Done check. Review child task quality and replan." 2>/dev/null || true
 }
 ```
@@ -1039,7 +1039,7 @@ checkEscalation() {
     | grep -c "idempotentReconcile:" || true)
   if [ "$ATTEMPTS" -gt 5 ]; then
     backlog task edit "$META_ID" \
-      --status "Needs Human" \
+      --status "Epic: Needs Human" \
       --append-notes "Escalated: budget — reconcile loop exceeded 5 attempts"
     return 1
   fi
@@ -1060,7 +1060,7 @@ checkEscalation() {
     done)
     if $ALL_IN_BACKLOG && [ "$DAYS_SINCE" -ge 7 ]; then
       backlog task edit "$META_ID" \
-        --status "Needs Human" \
+        --status "Epic: Needs Human" \
         --append-notes "noProgress: all children in Backlog for ${DAYS_SINCE} days (threshold: 7)"
       return 1
     fi
@@ -1075,7 +1075,7 @@ checkEscalation() {
   done | wc -l)
   if [ "$DESIRED_COUNT" -gt 0 ] && [ "$ACTUAL_COUNT" -gt $((DESIRED_COUNT * 2)) ]; then
     backlog task edit "$META_ID" \
-      --status "Needs Human" \
+      --status "Epic: Needs Human" \
       --append-notes "diverging: actual=${ACTUAL_COUNT} > 2×desired=${DESIRED_COUNT} — manual review needed"
     return 1
   fi
