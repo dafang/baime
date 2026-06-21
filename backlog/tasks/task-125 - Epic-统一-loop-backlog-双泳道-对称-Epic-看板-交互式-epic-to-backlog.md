@@ -1,10 +1,10 @@
 ---
 id: TASK-125
 title: 'Epic: 统一 loop-backlog 双泳道 + 对称 Epic 看板 + 交互式 epic-to-backlog'
-status: 'Epic: Evaluating'
+status: 'Epic: Done'
 assignee: []
 created_date: '2026-06-21 10:18'
-updated_date: '2026-06-21 11:15'
+updated_date: '2026-06-21 11:20'
 labels:
   - 'kind:epic'
 dependencies: []
