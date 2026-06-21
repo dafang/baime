@@ -1,7 +1,7 @@
 ---
 id: TASK-90
 title: 'P5: 宏观 intake —— meta-proposal 录入 + reviewLoop'
-status: Done
+status: 'Basic: Done'
 assignee: []
 created_date: '2026-06-20 06:05'
 updated_date: '2026-06-20 06:55'

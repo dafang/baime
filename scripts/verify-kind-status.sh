@@ -25,26 +25,6 @@ done
 VIOLATIONS=0
 CHECKED=0
 
-BASIC_STATUSES=(
-  "Basic: Proposal"
-  "Basic: Plan"
-  "Basic: Backlog"
-  "Basic: Ready"
-  "Basic: In Progress"
-  "Basic: Done"
-  "Basic: Needs Human"
-)
-
-EPIC_STATUSES=(
-  "Epic: Proposal"
-  "Epic: Plan"
-  "Epic: Decomposing"
-  "Epic: Awaiting Children"
-  "Epic: Evaluating"
-  "Epic: Done"
-  "Epic: Needs Human"
-)
-
 check_file() {
     local file="$1"
     local basename

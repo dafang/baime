@@ -1,7 +1,7 @@
 ---
 id: TASK-89
 title: 'P4: Gated 自动调度 —— WIP 上限 + budget 硬顶 + 人审门'
-status: Done
+status: 'Basic: Done'
 assignee: []
 created_date: '2026-06-20 06:05'
 updated_date: '2026-06-20 07:03'
