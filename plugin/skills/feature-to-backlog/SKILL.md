@@ -491,6 +491,12 @@ Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
 
 ## Constraints
 
+- **Scope gate (epic vs basic)**: If the feature naturally decomposes into ≥2 independent
+  deliverables with ordering/dependencies and a combined acceptance, stop and use
+  `/epic-to-backlog` instead. A Basic Task is NOT small — its plan may have Phase + Stage
+  two levels and span thousands of LOC. Only reach for an epic when one worker in one
+  worktree genuinely cannot finish the whole goal. See
+  `docs/proposals/proposal-epic-split-board.md` § 颗粒度.
 - This skill outputs docs and a backlog task only — it does not implement code
 - No branch creation, no worktree operations, no git push, no PR creation
 - One task per feature throughout; the same TASK_ID moves through all columns
