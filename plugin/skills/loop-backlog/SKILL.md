@@ -1484,7 +1484,7 @@ STEP 4 — Read Sub-Task Decomposition:
   section. Parse each intended child sub-task from that section.
 
 STEP 5 — Create children:
-  4. Create each child sub-task using the correct skill (NEVER use "backlog task create" directly):
+  4. Create each child sub-task using the correct skill (do NOT create children directly via CLI):
 
    Determine for each child whether it is a CODE-CHANGE task or DOC-ONLY task:
    - CODE-CHANGE: creates or modifies files under plugin/, scripts/, any SKILL.md, *.sh scripts
