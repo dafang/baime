@@ -1,10 +1,10 @@
 ---
 id: TASK-125
 title: 'Epic: 统一 loop-backlog 双泳道 + 对称 Epic 看板 + 交互式 epic-to-backlog'
-status: 'Epic: Awaiting Children'
+status: 'Epic: Evaluating'
 assignee: []
 created_date: '2026-06-21 10:18'
-updated_date: '2026-06-21 10:57'
+updated_date: '2026-06-21 11:15'
 labels:
   - 'kind:epic'
 dependencies: []
@@ -134,4 +134,10 @@ epicAwaitChildren: done=4/7 (125.1,125.2,125.3,125.4) reconcileRunCount=2 — �
 epicAwaitChildren: done=5/7 reconcileRunCount=3 — 核心 worker 集成完成。剩 125.6(删 loop-meta)→125.7(冒烟)。
 
 epicAwaitChildren: done=6/7 — loop-meta 已删除,legacy meta lane 退役。剩 125.7(端到端冒烟)。
+
+epicAwaitChildren: done=7/7 — all children Basic: Done.
+cap:await=done all_children_done:true
+
+cap:evaluate=recommendation:FINISH | done=7/7 needsHuman=0 | acceptance_gate: validate✓ config-16✓ smoke-terminal✓ loop-meta-removed✓ routing-34/34✓ | data_source: measured
+RECOMMENDATION: FINISH — 统一双泳道架构已完整交付并验证。确认请将 TASK-125 → Epic: Done;迭代请退回 Epic: Proposal/Plan。
 <!-- SECTION:NOTES:END -->
