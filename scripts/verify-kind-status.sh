@@ -69,8 +69,9 @@ BASIC_STATUSES = {
     "Basic: In Progress", "Basic: Done", "Basic: Needs Human"
 }
 EPIC_STATUSES = {
-    "Epic: Proposal", "Epic: Plan", "Epic: Decomposing",
-    "Epic: Awaiting Children", "Epic: Evaluating", "Epic: Done", "Epic: Needs Human"
+    "Epic: Proposal", "Epic: Plan", "Epic: Backlog", "Epic: Ready",
+    "Epic: Decomposing", "Epic: Awaiting Children", "Epic: Evaluating",
+    "Epic: Done", "Epic: Needs Human"
 }
 
 content = open(file_path).read()

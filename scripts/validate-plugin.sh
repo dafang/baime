@@ -733,20 +733,19 @@ c = yaml.safe_load(open(sys.argv[1]))
 st = c.get("statuses", [])
 bn = [s for s in st if str(s).startswith(("Epic:", "Basic:"))]
 legacy = [s for s in st if str(s).startswith("Meta-") or s in ("To Do", "Backlog", "Ready", "In Progress", "Done")]
-assert len(bn) == 14, f"expected 14 Epic:/Basic: statuses, got {len(bn)}: {bn}"
+assert len(bn) == 16, f"expected 16 Epic:/Basic: statuses (9 Epic + 7 Basic), got {len(bn)}: {bn}"
 assert not legacy, f"legacy/bare statuses present: {legacy}"
 PYEOF
 then
-    pass "config.yml: exactly 14 B″ statuses, no legacy/bare"
+    pass "config.yml: exactly 16 B″ statuses (9 Epic + 7 Basic), no legacy/bare"
 else
-    fail "config.yml: status integrity check failed (need 14 Epic:/Basic:, no legacy)"
+    fail "config.yml: status integrity check failed (need 16 Epic:/Basic:, no legacy)"
 fi
 
-# SKILL body bare-status guard: every --status write in a B″ WORKER skill must target
-# a valid B″ status. Catches regressions like bare "Needs Human"/"Ready"/"Meta-Done".
-# Scoped to the worker skills that drive the B″ board state machine. The intake skills
-# (feature-to-backlog, task-to-backlog, task-from-template, backlog-setup) still carry
-# pre-B″ bare statuses — their migration is tracked as a separate epic, not gated here.
+# SKILL body bare-status guard: every task --status write in a B″ status-writing skill
+# must target a valid B″ status. Catches regressions like bare "Needs Human"/"Ready"/
+# "Meta-Done". backlog-setup is excluded — its --status writes target `backlog decision
+# create` (ADR statuses Proposed/Accepted), not the task board.
 if python3 - "$REPO_ROOT" <<'PYEOF'
 import sys, re, glob, os
 root = sys.argv[1]
@@ -755,7 +754,8 @@ valid = {f"{lane}: {col}"
          for col in ("Proposal", "Plan", "Backlog", "Ready", "In Progress",
                      "Done", "Needs Human", "Decomposing", "Awaiting Children",
                      "Evaluating")}
-WORKER_SKILLS = ("loop-backlog", "loop-meta")
+WORKER_SKILLS = ("loop-backlog", "loop-meta", "epic-to-backlog",
+                 "feature-to-backlog", "task-to-backlog", "task-from-template")
 bad = []
 for f in [g for g in glob.glob(os.path.join(root, "plugin/skills/*/SKILL.md"))
           if os.path.basename(os.path.dirname(g)) in WORKER_SKILLS]:
