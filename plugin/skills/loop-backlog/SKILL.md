@@ -1,6 +1,6 @@
 ---
 name: loop-backlog
-description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits basic-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the backlog/.loop-stop sentinel is written."
+description: "Autonomous unified B″ Worker for the backlog.md board. Drives BOTH lanes from one Monitor session: basic-ready events execute kind:basic tasks in isolated git worktrees that merge back on success; epic-ready events auto-decompose a kind:epic task (Epic: Ready → Decomposing → children at Basic: Backlog → Awaiting Children); child-done events reconcile the parent epic and, when all children are Basic: Done, run evaluate and write a FINISH/ITERATE recommendation for human confirmation. Invoke /loop-backlog once; it runs until the backlog/.loop-stop sentinel is written."
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor, Agent
 contracts:
   - grep: "Monitor(persistent=true"
@@ -30,6 +30,18 @@ contracts:
   - grep: '"DoD #.*: PASS"'
     target: self
   - grep: '"DoD #.*: FAIL"'
+    target: self
+  - grep: "epic-ready"
+    target: self
+  - grep: "child-done"
+    target: self
+  - grep: "epicDecompose"
+    target: self
+  - grep: "decomposer"
+    target: self
+  - grep: "recommendation"
+    target: self
+  - grep: "Epic: Awaiting Children"
     target: self
 ---
 
@@ -73,15 +85,15 @@ workerLoop() = {
     return: Stopped,
 
   if (empty(tasks)):
-    -- No task yet; block persistently until daemon emits a basic-ready line
-    -- epic-ready:* lines are silently ignored here — handled by loop-meta in its own session
+    -- No basic task to claim; block persistently and dispatch the next daemon event.
+    -- The unified daemon (basic-daemon.js v7) emits THREE channels; this one worker
+    -- session handles all of them (no separate loop-meta session needed).
     event: Monitor(persistent=true),
-    if (event matches "basic-ready:TASK-*"):
-      return: workerLoop(),
-    if (stopSentinel()):
-      return: Stopped,
-    -- otherwise (epic-ready:*, noise): loop back silently
-    return: workerLoop(),
+    | stopSentinel()                       → return Stopped
+    | event matches "basic-ready:TASK-*"   → workerLoop()              -- re-claim & execute
+    | event matches "epic-ready:TASK-*"    → epicDecompose(extractId(event)); workerLoop()
+    | event matches "child-done:TASK-*"    → onChildDone(extractId(event)); workerLoop()
+    | otherwise                            → workerLoop(),             -- noise: loop back
 
   -- Parallel: create worktrees and spawn one background agent per task
   worktrees: ∀t ∈ tasks: withWorktree(t, cfg),
@@ -103,6 +115,109 @@ workerLoop() = {
 
   return: Done
 }
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Epic lane dispatch (B″). The unified daemon delivers epic-ready / child-done to
+-- this same worker. epic-ready means the human promoted Epic: Backlog → Epic: Ready
+-- (authorizing autonomous decomposition). child-done means a kind:basic child reached
+-- Basic: Done; we re-check its parent epic. All transitions write cap:* idempotency
+-- markers, mirroring the basic lane. See spec-stdlib § reviewLoop is NOT used here —
+-- proposal/plan review happens interactively in epic-to-backlog, not in this worker.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- epicDecompose: triggered by epic-ready (status Epic: Ready). Auto-processes the epic:
+-- Epic: Ready → Epic: Decomposing → create kind:basic children at Basic: Backlog →
+-- Epic: Awaiting Children. Idempotent via cap:decompose. Children carry parent_task_id.
+-- The human then promotes chosen children Basic: Backlog → Basic: Ready to execute them.
+epicDecompose :: TaskId → Outcome
+epicDecompose(id) = {
+  if (¬isEpicReady(id)):      return Idle,       -- status changed out from under us
+  if (hasCap(id, "decompose")): return Idle,     -- already decomposed (idempotent)
+  _:    setStatus(id, "Epic: Decomposing"),      -- auto-processing (≈ Basic: In Progress)
+  plan: readField(id, "implementationPlan"),
+  subs: decomposer(id, plan),                     -- subagent → [SubTaskSpec]
+  if (empty(subs)):
+    return escalateEpic(id, "decomposer returned no sub-tasks", "cap:decompose=empty"),
+  _:    ∀t ∈ subs: createSubTask(id, t),         -- kind:basic, Basic: Backlog, parent_task_id:id, DoD
+  if (¬verifySubTaskDod(id)):                     -- R1 guard: no rubber-stampable children
+    return escalateEpic(id, "decompose produced DoD-less child", "cap:decompose=dodless"),
+  _:    appendNote(id, "cap:decompose=done"),
+  _:    setStatus(id, "Epic: Awaiting Children"),
+  return: Reconciled
+}
+
+-- onChildDone: triggered by child-done (a kind:basic child hit Basic: Done). Find the
+-- parent epic; if it is a kind:epic at Epic: Awaiting Children and ALL its created
+-- children are Basic: Done, advance to Epic: Evaluating and evaluate. "All created" =
+-- every task with parent_task_id == epicId (archived children are excluded by archival).
+onChildDone :: TaskId → Outcome
+onChildDone(childId) = {
+  epicId: parentTaskId(childId),
+  if (epicId == ∅ ∨ ¬isKindEpic(epicId)):              return Idle,
+  if (status(epicId) ≠ "Epic: Awaiting Children"):     return Idle,
+  children: childrenOf(epicId),                          -- tasks with parent_task_id == epicId
+  done:     filter(c → status(c) == "Basic: Done", children),
+  needsHuman: filter(c → status(c) == "Basic: Needs Human", children),
+  if (length(done) < length(children)):
+    appendNote(epicId, "onChildDone: " + length(done) + "/" + length(children) + " children done"),
+    return Idle,                                          -- wait for the rest
+  _:  setStatus(epicId, "Epic: Evaluating"),             -- auto-processing
+  return: epicEvaluate(epicId, done, needsHuman)
+}
+
+-- epicEvaluate: aggregate child outcomes (measured: DoD pass + no Needs Human), write a
+-- FINISH/ITERATE recommendation, then SOFT-HALT. Does NOT auto-advance to Epic: Done —
+-- the human reads the recommendation and confirms (Epic: Evaluating → Epic: Done) or
+-- iterates (Epic: Evaluating → Epic: Proposal | Epic: Plan, re-run epic-to-backlog).
+epicEvaluate :: (TaskId, [Task], [Task]) → Outcome
+epicEvaluate(id, done, needsHuman) = {
+  if (hasCap(id, "evaluate")): return Idle,
+  verdict: if (empty(needsHuman) ∧ allDodPass(done)): "FINISH" else: "ITERATE",
+  reason:  if (verdict == "FINISH"): "all children Basic: Done with DoD pass"
+           else: "blockers: " + summarise(needsHuman) + " / DoD failures",
+  _: appendNote(id, "cap:evaluate=recommendation:" + verdict
+               + " | done=" + length(done) + " needsHuman=" + length(needsHuman)
+               + " | " + reason + " | data_source: measured"),
+  _: appendNote(id, "RECOMMENDATION: " + verdict
+               + ".\nTo finish: set status → Epic: Done."
+               + "\nTo iterate: set status → Epic: Proposal or Epic: Plan and re-run /epic-to-backlog."),
+  -- soft halt: stay at Epic: Evaluating; cap:evaluate guard makes re-emits no-ops.
+  return: Reconciled
+}
+
+-- escalateEpic: park the epic at Epic: Needs Human with a cap marker and reason note.
+escalateEpic :: (TaskId, Reason, CapMarker) → Outcome
+escalateEpic(id, r, cap) = {
+  appendNote(id, cap),
+  appendNote(id, "Escalated: " + r + "\nTo continue: resolve in notes, set status → Epic: Ready."),
+  setStatus(id, "Epic: Needs Human"),
+  return: NeedsHuman(r)
+}
+
+-- decomposer: subagent that reads the epic plan's Sub-Task Decomposition and returns a
+-- canonical [SubTaskSpec]. Each child is created via task-to-backlog so it carries a
+-- shell-gate DoD (no rubber-stampable children — TASK-93 R1). Moved here from loop-meta.
+decomposer :: (TaskId, PlanText) → [SubTaskSpec]
+decomposer(id, plan) = Agent(prompt=decomposerPrompt(id, plan), schema=SubTaskListSchema)
+
+-- createSubTask: create one kind:basic child at Basic: Backlog with parent_task_id:id,
+-- delegating to task-to-backlog so it has a multi-phase plan + shell-gate DoD.
+createSubTask :: (TaskId, SubTaskSpec) → ()
+createSubTask(parent, spec) = {
+  child: invoke("task-to-backlog", spec),   -- produces ## Definition of Done with ≥1 shell-gate
+  setLabel(child, "kind:basic"),
+  setParentTaskId(child, parent),           -- frontmatter parent_task_id for daemon/childrenOf
+  setStatus(child, "Basic: Backlog"),       -- NOT Ready — human promotes selected children
+  assert: hasDod(child)                      -- enforced by verify-subtask-dod.sh
+}
+
+-- verifySubTaskDod: R1 guard — every child of the epic carries a shell-gate DoD.
+verifySubTaskDod :: TaskId → Bool
+verifySubTaskDod(id) = shell("bash scripts/verify-subtask-dod.sh " + id) == 0
+
+-- allDodPass: measured slice — every done child's DoD shell-gates exit 0 (re-run).
+allDodPass :: [Task] → Bool
+allDodPass(done) = ∀c ∈ done: shell("bash scripts/verify-subtask-dod.sh " + c.id) == 0
 
 reap :: [Task] → ()
 reap(tasks) = ∀t ∈ tasks
@@ -1248,6 +1363,105 @@ echo "cap:execute=failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 echo "Stuck: $TASK_ID (DoD #$STUCK_INDEX)"
 echo "Task moved to Basic: Needs Human. Worktree preserved at $WORKTREE"
 WORK_DONE=false
+```
+
+### Epic dispatch (epic-ready / child-done)
+
+When `Monitor` yields an `epic-ready:` or `child-done:` line, the worker runs these
+handlers instead of claiming a basic task. Both are idempotent via `cap:*` markers.
+
+```bash
+# extractId: pull TASK-N from an event line like "epic-ready:TASK-12"
+extractId() { echo "$1" | grep -oP 'TASK-\d+(\.\d+)*' | head -1; }
+
+# childrenOf EPIC_ID → list of child task IDs (frontmatter parent_task_id == EPIC_ID)
+childrenOf() {
+  local EPIC_ID="$1"
+  grep -lE "^parent_task_id:\s*${EPIC_ID}\$" "${REPO_ROOT}"/backlog/tasks/*.md 2>/dev/null \
+    | while read -r f; do grep -oP '(?<=^id:\s)TASK-\S+' "$f"; done
+}
+
+taskStatus() { backlog task view "$1" --plain 2>/dev/null | grep -oP '(?<=Status:).*' \
+  | head -1 | grep -oP '(Basic|Epic): [A-Za-z ]+' | head -1 | xargs; }
+
+hasCap() { grep -q "cap:$2" "$(ls "${REPO_ROOT}"/backlog/tasks/${1,,}\ *.md 2>/dev/null | head -1)" 2>/dev/null; }
+
+# epicDecompose: epic-ready handler. Epic: Ready → Decomposing → children → Awaiting Children.
+epicDecompose() {
+  local EPIC_ID="$1"
+  [ "$(taskStatus "$EPIC_ID")" = "Epic: Ready" ] || { echo "epicDecompose: $EPIC_ID not Epic: Ready, skip"; return 0; }
+  if hasCap "$EPIC_ID" "decompose=done"; then echo "epicDecompose: $EPIC_ID already done"; return 0; fi
+
+  backlog task edit "$EPIC_ID" --status "Epic: Decomposing" --plain >/dev/null
+
+  # decomposer subagent: read the epic plan's "Sub-Task Decomposition" and create one
+  # kind:basic child per leaf via task-to-backlog (shell-gate DoD), parent_task_id=EPIC_ID,
+  # status Basic: Backlog. Spawn via Agent(run_in_background=false). The agent MUST NOT
+  # promote children to Basic: Ready (that is the human's selection gate).
+  Agent run_in_background=false prompt="$(cat <<DECOMP
+You are the epic decomposer for ${EPIC_ID}. Read its Implementation Plan
+(backlog task view ${EPIC_ID} --plain), specifically the Sub-Task Decomposition section.
+For EACH intended child sub-task, invoke /task-to-backlog to create a kind:basic backlog
+task with a multi-phase plan and shell-gate DoD. For each created child:
+  - set label kind:basic
+  - set frontmatter parent_task_id: ${EPIC_ID}
+  - set status "Basic: Backlog"   (NOT Ready — the human promotes)
+Do not create children that already exist (idempotent). Output the created TASK-ids.
+DECOMP
+)"
+
+  # R1 guard: every child must carry a shell-gate DoD
+  if ! bash scripts/verify-subtask-dod.sh "$EPIC_ID" >/dev/null 2>&1; then
+    backlog task edit "$EPIC_ID" --status "Epic: Needs Human" \
+      --append-notes "cap:decompose=dodless
+Escalated: decompose produced a DoD-less child. Fix sub-task DoD, set status → Epic: Ready."
+    return 1
+  fi
+  backlog task edit "$EPIC_ID" --status "Epic: Awaiting Children" \
+    --append-notes "cap:decompose=done
+epicDecompose: children created at Basic: Backlog. Promote chosen children → Basic: Ready to execute."
+}
+
+# onChildDone: child-done handler. If parent epic at Awaiting Children and ALL children
+# are Basic: Done → Epic: Evaluating → write FINISH/ITERATE recommendation, then soft-halt.
+onChildDone() {
+  local CHILD_ID="$1"
+  local CHILD_FILE; CHILD_FILE=$(ls "${REPO_ROOT}"/backlog/tasks/${CHILD_ID,,}\ *.md 2>/dev/null | head -1)
+  [ -n "$CHILD_FILE" ] || return 0
+  local EPIC_ID; EPIC_ID=$(grep -oP '(?<=^parent_task_id:\s)TASK-\S+' "$CHILD_FILE" | head -1)
+  [ -n "$EPIC_ID" ] || return 0
+  [ "$(taskStatus "$EPIC_ID")" = "Epic: Awaiting Children" ] || return 0
+
+  local TOTAL=0 DONE=0 NEEDS=0
+  while read -r CID; do
+    [ -z "$CID" ] && continue
+    TOTAL=$((TOTAL+1))
+    case "$(taskStatus "$CID")" in
+      "Basic: Done") DONE=$((DONE+1)) ;;
+      "Basic: Needs Human") NEEDS=$((NEEDS+1)) ;;
+    esac
+  done < <(childrenOf "$EPIC_ID")
+
+  if [ "$DONE" -lt "$TOTAL" ]; then
+    backlog task edit "$EPIC_ID" --append-notes "onChildDone: ${DONE}/${TOTAL} children done"
+    return 0
+  fi
+
+  # All created children done → evaluate
+  backlog task edit "$EPIC_ID" --status "Epic: Evaluating" --plain >/dev/null
+  if hasCap "$EPIC_ID" "evaluate"; then return 0; fi
+
+  # Measured slice: re-run every child's DoD shell-gate
+  local DOD_OK=true
+  bash scripts/verify-subtask-dod.sh "$EPIC_ID" >/dev/null 2>&1 || DOD_OK=false
+  local VERDICT="ITERATE"
+  if [ "$NEEDS" -eq 0 ] && [ "$DOD_OK" = "true" ]; then VERDICT="FINISH"; fi
+
+  backlog task edit "$EPIC_ID" \
+    --append-notes "cap:evaluate=recommendation:${VERDICT} | done=${DONE}/${TOTAL} needsHuman=${NEEDS} dod_pass=${DOD_OK} | data_source: measured" \
+    --append-notes "RECOMMENDATION: ${VERDICT}. To finish: set status → Epic: Done. To iterate: set status → Epic: Proposal or Epic: Plan and re-run /epic-to-backlog."
+  # soft halt: stay at Epic: Evaluating; cap:evaluate guard makes daemon re-emits no-ops.
+}
 ```
 
 ## Shutdown
