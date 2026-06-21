@@ -1,6 +1,12 @@
 # Proposal: Epic 能力模型（B 档）——用可组合 trait 替代 Meta-* 类型体系
 
-**状态**: Proposal  
+> ⚠️ **已过时（SUPERSEDED）** — 本文档由 [`proposal-epic-split-board.md`](./proposal-epic-split-board.md)（B′ 档，拆板模型）取代，不再采纳。
+>
+> **过时原因**：B 档在**单一 backlog 板**上用 capability + done-marker 同时表达 epic 与 leaf 两类任务，并把状态栏缩减为纯调度轴。但 `status`（列）本身就是状态，每个 capability 也有状态——两者并非正交，而是同一积状态 `Capability-PC × Scheduling-SubState` 的两个坐标。在单列轴上同时表达两个坐标，逼出了一整套 `phase:` / `wait:children` / `hold:*` label 机制与派生视图（在视图层重算 `firstUnsatisfied`），并遗留 7 处缺口。
+>
+> 根因是**把两类对象托管在同一块板上**：leaf 天然只有调度轴，epic 天然只有流水线轴，二者仅在共用 `status` 枚举时冲突。B′ 档为 epic 单设一块 backlog 板，每块板用原生 `column = status` 表达自己唯一的轴，冲突消失、label 机制全删。下文保留作设计推演记录。
+
+**状态**: ~~Proposal~~ → **Superseded by B′ 档**  
 **日期**: 2026-06-21  
 **关联**: TASK-93（Exp-K）、loop-meta-architecture.md
 
@@ -21,7 +27,7 @@
 ## Goals
 
 1. 单一事件循环、单一 daemon——彻底消除 Meta-* lane 与 Backlog lane 的竞争。
-2. 任务形态由声明的 `capabilities` 决定，不由状态名称决定——标准状态 lane 不变。
+2. 任务形态由声明的 `capabilities` 决定，不由状态名称决定——状态栏缩减为纯调度轴（5 个状态）。
 3. 新增能力 = 注册表加一行，不动 dispatcher、不加状态、不加 daemon。
 4. 现有三套 reviewLoop 合并为 spec-stdlib 中一个共享处理器——消除代码重复（直接解决 MT-08 跨 skill 重复检测的动机之一）。
 5. Exp-K 数据采集的 evaluate→replan 环原封不动保留，只是不再绑死在 Meta-Active 状态上。
@@ -74,13 +80,13 @@ propose → plan ─┬─→ decompose ──→ evaluate ⟲ NotMet → (修 p
 ---
 id: TASK-106
 title: Add contracts-density soft-warning to validate-plugin.sh
-status: Ready                                          # ← 标准状态，不变
+status: Backlog                                        # ← 调度轴（5 个状态之一）
 capabilities: [propose, plan, decompose, evaluate]    # ← 新增，声明拥有的能力
 parent_task_id: null
 ---
 ```
 
-`status` 沿用标准 lane（Proposal / Plan / Backlog / Ready / In Progress / Done）。`capabilities` 决定处理器路由，与 `status` 正交：一个处于 `In Progress` 的任务可以是 epic（有 `decompose`），也可以是 leaf（有 `execute`）。
+`status` 只编码**调度轴**（见下节）；`capabilities` 决定处理器路由，与 `status` 正交：一个处于 `In Progress` 的任务可以是 epic（有 `decompose`），也可以是 leaf（有 `execute`）。
 
 ### Done-marker 写入 notes
 
@@ -95,16 +101,69 @@ cap:evaluate=Met
 
 这些标记**可 grep、可追溯、向后兼容**。`check-roi-gate.sh` 只需把 `status: Meta-Done` 改为 `cap:evaluate=Met` 即可。
 
-### 现有标准状态的语义
+## 状态栏重设计
 
-| 状态 | 在新模型中的含义 |
-|------|----------------|
-| `Proposal` | 处理器正在运行 `propose` 能力（起草/review） |
-| `Plan` | 处理器正在运行 `plan` 能力（起草/review） |
-| `Backlog` | 已完成 plan，等待调度（epic 子任务的初始状态） |
-| `Ready` | WIP 调度器已提升，等待执行 |
-| `In Progress` | 执行器正在工作（execute）或 reconcile 正在进行（decompose） |
+### 两轴问题
+
+当前状态栏同时编码了两个独立轴：
+
+- **调度轴**（任务是否可被 worker 拾取）：Backlog → Ready → In Progress → Done / Needs Human
+- **能力进度轴**（任务处于哪个能力阶段）：Proposal → Plan → …（Meta-* 系列同理）
+
+把两轴压入同一字段导致矛盾：状态 `Proposal` 既意味着"等待 propose 处理器"（能力轴），又暗示"不应被 worker 执行"（调度轴）。这与"capabilities 与 status 正交"的设计目标直接冲突。
+
+### 缩减后的调度状态（5 个）
+
+| 状态 | 含义 |
+|------|------|
+| `Backlog` | 已进入队列，等待调度 |
+| `Ready` | WIP 调度器已提升，等待 worker 拾取 |
+| `In Progress` | Worker 正在处理（任何能力阶段） |
 | `Done` | 所有声明能力的 done-marker 均已写入 |
+| `Needs Human` | 需要人工介入（escalation） |
+
+**消除的 6 个状态**：`Proposal`、`Plan`、`Meta-Proposal`、`Meta-Plan`、`Meta-Active`、`Meta-Done`
+
+能力进度改由 `cap:*` 标记追踪；"任务现在在哪个能力阶段"从 notes 读取，而不从 `status` 推断。
+
+### propose / plan 是运行时能力（纳入 backlog 管理，但不占 column）
+
+`propose` 和 `plan` 必须作为**运行时能力**由 dispatcher 管理，而非在 skill 内创建前跑完。理由：
+
+- 有些任务需要**人工多轮 propose / plan**。若在任务持久化前就跑完 review，backlog 里此时还没有这个任务——没有载体记录每轮 review 的 notes，无法 park、无法在 web UI 查看、无法中断后恢复。
+- 把 propose/plan 留在运行时，任务**从创建起就在 backlog 内**，整个起草—审查—修订过程都被纳入管理。
+
+关键洞察：**纳入 backlog 管理 ≠ 需要专属状态 column**。propose/plan 阶段复用已有的调度轴状态：
+
+| 阶段 | 调度状态（`status`） | 能力进度（notes） |
+|------|---------------------|------------------|
+| 正在起草 / 自动 review | `In Progress` | — |
+| **等待人工 review（多轮门控）** | `Needs Human` | `reviewLoop: iteration N/M` |
+| 人工反馈后继续 | `Ready` → `In Progress` | 累积 review notes |
+| 批准 | 推进下一能力 | `cap:propose=approved` / `cap:plan=approved` |
+
+任务一直在库里、每轮 review 是一条 note、`Needs Human` 是可见的等待态、`cap:*` 标记记录进度。多轮人工 propose/plan 因此**完整落在 backlog.md 系统内**，却不需要 `Proposal` / `Plan` 两个 column。
+
+skill 的职责退化为**播种草稿**：写入初始 proposal/plan facet 内容 + 声明 `capabilities`，状态置 `Backlog`，**不写 `cap:*=approved` 标记**（审查由 dispatcher 在运行时执行）。
+
+> 注：单一 dispatcher 独占任务生命周期，skill 只播种、不并发执行 reviewLoop，因此把 propose/plan 放回运行时**不会复发** TASK-105 的竞争 bug——那个 bug 是"两 daemon + skill 同时写"的产物，与 propose/plan 在何处执行无关。
+
+### `Needs Human` 的双重语义
+
+缩减后 `Needs Human` 同时承载两类停顿：正常 **review 门控**（propose/plan 等待人工批准）与异常 **escalation**（noProgress / diverging / infeasible）。两者在调度轴上一致（worker 停下、等人介入），语义区别写在 note 前缀里（`reviewLoop:` vs `Escalated:`），由下方看板派生视图分组区分。
+
+### 看板视图
+
+原来的"Proposal / Plan"列变为**派生视图**：从 `In Progress` 任务的 `cap:*` 标记推断当前活跃能力，生成分组展示，不影响 `status` 字段本身。例如：
+
+```
+[In Progress | cap:decompose 活跃]  ← 视图过滤，status 仍是 In Progress
+[In Progress | cap:evaluate 活跃]
+```
+
+### 迁移难点
+
+状态枚举变更需要修改 `backlog.md` 的全局 `status-lane` 配置。这是本次迁移最硬的一步：所有现有任务的 Meta-* 状态必须在变更前完成清理或批量 sed 转换，否则 backlog CLI 会拒绝未知状态值。迁移步骤见"迁移路径"阶段 1B。
 
 ---
 
@@ -235,15 +294,18 @@ evaluateProcessor(id) = {
 
 skill 的职责收敛为**"生成器"**：生成初始 facet 内容 + 写入 `capabilities` 字段 + 设置初始状态。处理器逻辑全部在 dispatcher 侧，不在 skill 侧。
 
+所有 skill 一律以 `Backlog` 状态播种任务（不再有 Proposal/Plan 初始状态）；dispatcher 按 `capabilities` 顺序路由 propose → plan → …。
+
 | Skill | capabilities 产出 | 初始状态 | 处理器路径 |
 |-------|-----------------|---------|-----------|
 | `task-to-backlog` | `[plan, execute]` | Backlog | plan → execute → evaluate（可选） |
-| `feature-to-backlog` | `[propose, plan, execute]` | Proposal | propose → plan → execute → evaluate（可选） |
-| `epic-to-backlog`（new） | `[propose, plan, decompose, evaluate]` | Proposal | propose → plan → decompose ⟲ evaluate |
+| `feature-to-backlog` | `[propose, plan, execute]` | Backlog | propose → plan → execute → evaluate（可选） |
+| `epic-to-backlog`（new） | `[propose, plan, decompose, evaluate]` | Backlog | propose → plan → decompose ⟲ evaluate |
 
-`meta-task-to-backlog`（本次新建）**直接改名/收敛为 `epic-to-backlog`**，内容几乎不变——它已经产出 proposal + plan，只需：
+`meta-task-to-backlog`（本次新建）**直接改名/收敛为 `epic-to-backlog`**：
 1. 写入 `capabilities: [propose, plan, decompose, evaluate]` frontmatter
-2. 最终状态设 `Backlog`（不再需要 `Meta-Plan`，dispatcher 会按 capabilities 路由）
+2. 播种初始 proposal/plan 草稿到 facet，最终状态设 `Backlog`（不再需要 `Meta-Plan`）
+3. **不写 `cap:propose=approved` / `cap:plan=approved`**——审查门控由 dispatcher 在运行时执行（见"propose / plan 是运行时能力"节）。需要人工多轮审查的任务在此阶段停在 `Needs Human`，直到批准后才写入 approved 标记。
 
 ---
 
@@ -274,7 +336,7 @@ dependencyDAG["security-review"] = { deps: ["propose"], before: ["plan"] }
 
 | 维度 | 现有 Meta-* 模型 | Epic Capability 模型（B 档） |
 |------|----------------|---------------------------|
-| 状态数 | 4 自定义（Meta-\*）+ 6 标准 = 10 | 6 标准（不变） |
+| 状态数 | 4 自定义（Meta-\*）+ 6 标准 = 10 | 5（缩减，去掉 Proposal/Plan/Meta-\*） |
 | Daemon 数 | 2（loop-backlog + loop-meta） | 1 |
 | 事件类型 | task-ready + meta-ready | task-ready（1 种） |
 | 新增任务形态 | +1 skill + 自定义状态 | 注册表 +1 行 |
@@ -287,26 +349,35 @@ dependencyDAG["security-review"] = { deps: ["propose"], before: ["plan"] }
 
 ## 迁移路径
 
-### 阶段 1：基础设施（不动现有任务）
+### 阶段 1A：基础设施（不动现有任务）
 
 1. **spec-stdlib 扩展**：把 reviewLoop 从 task-to-backlog / feature-to-backlog / meta-task-to-backlog 提取为 `spec-stdlib § reviewLoop`（通用，参数化 review 标准）。
 2. **Dispatcher 实现**：在 loop-backlog（或新统一 loop）中加入 `capabilities` 读取 + 注册表路由逻辑。兼容旧任务（无 `capabilities` 字段 → 走原有 execute 路径）。
 3. **check-roi-gate.sh**：把 `status: Meta-Done` + `evaluator:` 改为 `cap:evaluate=Met`。
 
+### 阶段 1B：状态枚举缩减（最硬的迁移步骤）
+
+4. **清理现有 Meta-\* 任务**：将所有 `Meta-Proposal` / `Meta-Plan` / `Meta-Active` / `Meta-Done` 状态的任务批量转换（sed）为 `Backlog` / `In Progress` / `Done`，并写入对应 `cap:*` 标记：
+   - `Meta-Plan` → `Backlog` + `cap:propose=approved` + `cap:plan=approved`
+   - `Meta-Active` → `In Progress` + `cap:propose=approved` + `cap:plan=approved`
+   - `Meta-Done` → `Done` + `cap:propose=approved` + `cap:plan=approved` + `cap:decompose=converged`
+5. **修改 `backlog.md` 全局配置**：从 `status-lane` 枚举中删除 `Proposal`、`Plan`、`Meta-Proposal`、`Meta-Plan`、`Meta-Active`、`Meta-Done`，仅保留 `Backlog / Ready / In Progress / Done / Needs Human`。
+6. 步骤 4 必须在步骤 5 之前完成——顺序错误会导致 backlog CLI 拒绝已有任务的状态值。
+
 ### 阶段 2：新 skill
 
-4. `epic-to-backlog` skill（从 `meta-task-to-backlog` 改名，写入 `capabilities` frontmatter，终态改 Backlog）。
-5. 更新 `task-to-backlog` / `feature-to-backlog` 写入对应 `capabilities` 字段（向后兼容：旧任务无此字段不影响执行）。
+7. `epic-to-backlog` skill（从 `meta-task-to-backlog` 改名，写入 `capabilities` frontmatter，终态改 Backlog，并在结束时写入 `cap:propose=approved` + `cap:plan=approved`）。
+8. 更新 `task-to-backlog` / `feature-to-backlog` 写入对应 `capabilities` 字段（向后兼容：旧任务无此字段不影响执行）。
 
 ### 阶段 3：现有 Meta-Plan 任务迁移（TASK-106–117）
 
-6. 批量 sed：把 12 个任务的 `status: Meta-Plan` 改为 `status: Backlog`，加入 `capabilities: [propose, plan, decompose, evaluate]`，并写入 `cap:propose=approved` + `cap:plan=approved`（已通过 review）。
-7. 删除 loop-meta 独立 session / Meta-* 状态配置。
+9. 已由阶段 1B 步骤 4 覆盖。确认 12 个任务均已转换为 `status: Backlog` + `capabilities: [propose, plan, decompose, evaluate]` + `cap:propose=approved` + `cap:plan=approved`。
+10. 删除 loop-meta 独立 session；停止发布 `meta-ready` 事件。
 
 ### 阶段 4：验证
 
-8. 跑 Exp-K（loop-backlog + dispatcher 路由 12 个 epic → draftDecomposition → 子任务 → evaluate），采集 replan 频率 baseline。
-9. `check-roi-gate.sh` 用新 grep 模式确认 P3→P4 门控可用。
+11. 跑 Exp-K（loop-backlog + dispatcher 路由 12 个 epic → draftDecomposition → 子任务 → evaluate），采集 replan 频率 baseline。
+12. `check-roi-gate.sh` 用新 grep 模式确认 P3→P4 门控可用。
 
 ---
 
@@ -323,7 +394,7 @@ dependencyDAG["security-review"] = { deps: ["propose"], before: ["plan"] }
 
 ## 约束
 
-- 不引入新状态枚举；现有 backlog.md 状态 lane 不变
+- 状态栏缩减为 5 个（Backlog / Ready / In Progress / Done / Needs Human）；6 个旧状态（Proposal/Plan/Meta-*）在阶段 1B 迁移后删除
 - 不引入第三方 schema 库；能力注册表是纯 bash/JS 字典
 - `capabilities` 字段一旦写入不再运行时修改（只读声明）；能力进度通过 notes 标记追踪
 - 本文档是 B 档方案（预注册 5 个能力，DAG 写死）；C 档（能力依赖可声明、schema 化）留作未来演进
