@@ -1,6 +1,6 @@
 ---
 name: loop-backlog
-description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits task-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the backlog/.loop-stop sentinel is written."
+description: "Autonomous L0 Worker for the backlog.md task queue. Each task runs in an isolated git worktree, then merges back to master on success. Starts an event-driven daemon that emits basic-ready events; uses Monitor to react instantly. Invoke /loop-backlog once to start the worker loop; it keeps running until the backlog/.loop-stop sentinel is written."
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor, Agent
 contracts:
   - grep: "Monitor(persistent=true"
@@ -15,13 +15,13 @@ contracts:
     target: self
   - not-grep: "ScheduleWakeup"
     target: self
-  - grep: "loop-backlog-daemon"
+  - grep: "basic-daemon"
     target: self
   - grep: ".daemon.pid"
     target: self
   - grep: "Agent(run_in_background=true"
     target: self
-  - grep: "\"In Progress\""
+  - grep: "\"Basic: In Progress\""
     target: self
   - grep: ".agent-done-"
     target: self
@@ -57,7 +57,7 @@ detectLang :: () → Lang  -- see spec-stdlib § detectLang
 data Outcome = Done CommitHash | NeedsHuman Reason | Idle | Stopped
 
 ensureDaemonTest :: () → ()
--- Write scripts/loop-backlog-daemon.test.js if it doesn't exist or is outdated.
+-- Write scripts/basic-daemon.test.js if it doesn't exist or is outdated.
 -- Runs node on the test file to verify the daemon helpers are correct.
 
 workerLoop :: () → Outcome
@@ -73,14 +73,14 @@ workerLoop() = {
     return: Stopped,
 
   if (empty(tasks)):
-    -- No task yet; block persistently until daemon emits a task-ready line
-    -- meta-ready:* lines are silently ignored here — handled by loop-meta in its own session
+    -- No task yet; block persistently until daemon emits a basic-ready line
+    -- epic-ready:* lines are silently ignored here — handled by loop-meta in its own session
     event: Monitor(persistent=true),
-    if (event matches "task-ready:TASK-*"):
+    if (event matches "basic-ready:TASK-*"):
       return: workerLoop(),
     if (stopSentinel()):
       return: Stopped,
-    -- otherwise (meta-ready:*, noise): loop back silently
+    -- otherwise (epic-ready:*, noise): loop back silently
     return: workerLoop(),
 
   -- Parallel: create worktrees and spawn one background agent per task
@@ -107,20 +107,21 @@ workerLoop() = {
 reap :: [Task] → ()
 reap(tasks) = ∀t ∈ tasks
   where claimAge(t) > 30min ∨ ¬hasClaimed(t): {
-    reset(t, "Ready"),
+    reset(t, "Basic: Ready"),
     appendNote(t, "Requeued by reaper: in-progress timeout."),
     removeWorktree(t)
   }
 
 claimBatch :: Int → [Task]
 claimBatch(n) = {
-  tasks: take(n, readyTasks()),
+  tasks: take(n, basicReadyTasks()),
   if (empty(tasks)): return [],
   ∀t ∈ tasks: atomically: {
-    setStatus(t, "In Progress"),
-    appendNote(t, "claimed: " + now())
+    setStatus(t, "Basic: In Progress"),
+    appendNote(t, "claimed: " + now()),
+    writeCap(t, "cap:claim=started")
   },
-  return: tasks        -- actual list; may be fewer than n if fewer Ready tasks exist
+  return: tasks        -- actual list; may be fewer than n if fewer Basic: Ready tasks exist
 }
 
 -- spawnAgent: launch a background agent for a single task in its worktree.
@@ -205,9 +206,10 @@ readHumanReply(T) =
 -- Write a clear "Human, please answer:" question so the user can reply directly in Notes.
 escalate :: (Task, Reason) → Outcome
 escalate(T, r) = {
-  setStatus(T, "Needs Human"),
+  setStatus(T, "Basic: Needs Human"),
+  writeCap(T, "cap:execute=failed"),
   appendNote(T, "Escalated: " + r
-               + "\nTo continue: answer in Implementation Notes, then set status → Ready."),
+               + "\nTo continue: answer in Implementation Notes, then set status → Basic: Ready."),
   return: NeedsHuman(r)
 }
 
@@ -227,35 +229,109 @@ merge(T, hash) =
   | mergeNoFF(T.branch) succeeds → markDone(T, hash); removeWorktree(T); Done(hash)
   | otherwise                    → markNeedsHuman(T, "merge conflict"); NeedsHuman("merge conflict")
 
-## Critical Protocol (MUST NOT deviate)
+## basicDAG — Basic Worker State Machine
 
-When a `task-ready:TASK-XX` event arrives, the worker MUST execute these steps in order:
+The basic channel uses the following status transitions (basicDAG):
 
-**Step 1 — Claim (set In Progress BEFORE any other work):**
+```
+Basic: Ready
+  → (claim)          Basic: In Progress    cap:claim=started
+  → (execute done)   Basic: Done           cap:execute=done
+  → (execute failed) Basic: Needs Human    cap:execute=failed
+  → (merge conflict) Basic: Needs Human    cap:merge=failed
+```
+
+### Dispatch spec
+
+When a `basic-ready:TASK-N` event arrives, the worker MUST execute these steps in order:
+
+**Step 1 — Claim (set `Basic: In Progress` BEFORE any other work):**
 ```bash
-backlog task edit TASK-XX --status "In Progress" \
+backlog task edit TASK-N --status "Basic: In Progress" \
   --append-notes "claimed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Write idempotency marker
+echo "cap:claim=started" >> backlog/.caps/TASK-N
 ```
 
 **Step 2 — Spawn implementation agent (NEVER do implementation inline):**
 ```
-Agent(run_in_background=true, prompt=executePrompt(TASK-XX, worktree, branch, signal_file))
+Agent(run_in_background=true, prompt=executePrompt(TASK-N, worktree, branch, signal_file))
 ```
 The `allowed-tools` passed to the agent explicitly excludes `Agent` to prevent recursive spawn.
 
 **Step 3 — Wait for signal file:**
 ```bash
-# Poll until backlog/.agent-done-TASK-XX exists
+# Poll until backlog/.agent-done-TASK-N exists
 ```
 
-**Step 4 — Merge and mark Done:**
+**Step 4 — Merge and mark Done (cap:execute=done):**
 ```bash
 git merge --no-ff <branch>
-backlog task edit TASK-XX --status "Done" \
+backlog task edit TASK-N --status "Basic: Done" \
+  --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Write terminal idempotency marker
+echo "cap:execute=done" >> backlog/.caps/TASK-N
+```
+
+**Step 5 — notifyParentIfAny:**
+After reaching a terminal status (`Basic: Done` or `Basic: Needs Human`), check if
+`parent_task_id` is set in the task frontmatter. If so, emit a completion note to the parent:
+```bash
+PARENT=$(backlog task view TASK-N --plain | grep -oP '(?<=parent_task_id: )TASK-\d+(\.\d+)*')
+if [ -n "$PARENT" ]; then
+  backlog task edit "$PARENT" --append-notes \
+    "Sub-task TASK-N reached terminal status: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
+```
+
+### cap:* idempotency markers
+
+`cap:*` markers are written to `backlog/.caps/TASK-N` at each state transition.
+They prevent double-execution if the worker is restarted mid-task:
+
+| marker              | meaning                          |
+|---------------------|----------------------------------|
+| `cap:claim=started` | task has been claimed            |
+| `cap:execute=done`  | agent completed successfully     |
+| `cap:execute=failed`| agent escalated (Needs Human)    |
+| `cap:merge=failed`  | merge conflict (Needs Human)     |
+
+Before claiming, the worker checks if a `cap:claim=started` marker already exists for the
+task — if so, it skips re-claiming and waits for the existing signal file instead.
+
+**Prohibited shortcut**: doing implementation directly in the worker agent (without `Agent(run_in_background=true, ...)`) violates Step 2 and causes Step 1 to be silently skipped in practice. The task will jump from `Basic: Ready` → `Basic: Done` without ever entering `Basic: In Progress`.
+
+---
+
+## Critical Protocol (MUST NOT deviate)
+
+When a `basic-ready:TASK-N` event arrives, the worker MUST execute these steps in order:
+
+**Step 1 — Claim (set `Basic: In Progress` BEFORE any other work):**
+```bash
+backlog task edit TASK-N --status "Basic: In Progress" \
+  --append-notes "claimed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+**Step 2 — Spawn implementation agent (NEVER do implementation inline):**
+```
+Agent(run_in_background=true, prompt=executePrompt(TASK-N, worktree, branch, signal_file))
+```
+The `allowed-tools` passed to the agent explicitly excludes `Agent` to prevent recursive spawn.
+
+**Step 3 — Wait for signal file:**
+```bash
+# Poll until backlog/.agent-done-TASK-N exists
+```
+
+**Step 4 — Merge and mark `Basic: Done`:**
+```bash
+git merge --no-ff <branch>
+backlog task edit TASK-N --status "Basic: Done" \
   --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
-**Prohibited shortcut**: doing implementation directly in the worker agent (without `Agent(run_in_background=true, ...)`) violates Step 2 and causes Step 1 to be silently skipped in practice. The task will jump from `Ready` → `Done` without ever entering `In Progress`.
+**Prohibited shortcut**: doing implementation directly in the worker agent (without `Agent(run_in_background=true, ...)`) violates Step 2 and causes Step 1 to be silently skipped in practice. The task will jump from `Basic: Ready` → `Basic: Done` without ever entering `Basic: In Progress`.
 
 ---
 
@@ -294,13 +370,13 @@ fi
 
 ### ensureDaemonScript
 
-Write the daemon script to `scripts/loop-backlog-daemon.js`, overwriting if the version tag
+Write the daemon script to `scripts/basic-daemon.js`, overwriting if the version tag
 does not match. Node.js is guaranteed available on every Claude Code install; no runtime
 dependency needed.
 
 ```bash
-DAEMON_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.js"
-DAEMON_VERSION="v5"
+DAEMON_SCRIPT="${REPO_ROOT}/scripts/basic-daemon.js"
+DAEMON_VERSION="v6"
 
 NEED_WRITE=true
 if [ -f "$DAEMON_SCRIPT" ]; then
@@ -314,38 +390,41 @@ if [ "$NEED_WRITE" = "true" ]; then
 #!/usr/bin/env node
 // daemon-version: v6
 /**
- * loop-backlog-daemon.js — polls backlog tasks dir and emits task-ready events to stdout.
+ * basic-daemon.js — polls backlog tasks dir and emits basic-ready events to stdout.
  *
- * Emits one line per Ready transition:      "task-ready:TASK-N"
- * Emits one line per Meta-ready transition: "meta-ready:TASK-N"
- * Meta-lane tasks (Meta-Proposal, Meta-Plan, Meta-Active) are excluded from task-ready.
- * Stops on stop-sentinel file or SIGTERM. Does NOT self-terminate on parent PID death
- * (parent is a transient Bash shell; lifecycle is managed by sentinel and nohup/disown).
+ * Emits one line per Basic:Ready transition: "basic-ready:TASK-N"
+ * Only tasks with kind:basic label AND status "Basic: Ready" are emitted.
+ * Excludes tasks with kind:epic label (those go to epic-daemon's channel).
+ * Stops on stop-sentinel file or SIGTERM.
  *
  * Pure Node.js stdlib — no npm dependencies required.
+ * Reads parent_task_id from task frontmatter for notifyParentIfAny hook.
  */
-
-const fs = require('fs');
+'use strict';
+const fs   = require('fs');
 const path = require('path');
+
+// The status that triggers emission on the basic channel
+const BASIC_READY_STATUS = 'basic: ready';
 
 function parseArgs(argv) {
   const args = {
     tasksDir: 'backlog/tasks',
-    pidFile: 'backlog/.daemon.pid',
+    pidFile:  'backlog/.basic-daemon.pid',
     stopFile: 'backlog/.loop-stop',
     interval: 0.5,
   };
   for (let i = 2; i < argv.length; i++) {
     switch (argv[i]) {
-      case '--tasks-dir':  args.tasksDir  = argv[++i]; break;
-      case '--pid-file':   args.pidFile   = argv[++i]; break;
-      case '--stop-file':  args.stopFile  = argv[++i]; break;
-      case '--interval':   args.interval  = parseFloat(argv[++i]); break;
+      case '--tasks-dir':  args.tasksDir = argv[++i]; break;
+      case '--pid-file':   args.pidFile  = argv[++i]; break;
+      case '--stop-file':  args.stopFile = argv[++i]; break;
+      case '--interval':   args.interval = parseFloat(argv[++i]); break;
       case '--help': case '-h':
         process.stdout.write(
-          'Usage: loop-backlog-daemon.js [options]\n' +
+          'Usage: basic-daemon.js [options]\n' +
           '  --tasks-dir <path>  Directory of task markdown files (default: backlog/tasks)\n' +
-          '  --pid-file  <path>  PID file path (default: backlog/.daemon.pid)\n' +
+          '  --pid-file  <path>  PID file path (default: backlog/.basic-daemon.pid)\n' +
           '  --stop-file <path>  Stop sentinel path (default: backlog/.loop-stop)\n' +
           '  --interval  <secs> Poll interval in seconds (default: 0.5)\n'
         );
@@ -358,67 +437,69 @@ function parseArgs(argv) {
 function parseTaskId(filename) {
   const base = path.basename(filename, path.extname(filename)).toUpperCase();
   for (const part of base.split(/\s+/)) {
-    if (/^TASK-\d+$/.test(part)) return part;
+    if (/^TASK-\d+(\.\d+)*$/.test(part)) return part;
   }
-  const m = base.match(/\bTASK-(\d+)\b/);
+  const m = base.match(/\bTASK-(\d+(?:\.\d+)*)\b/);
   return m ? `TASK-${m[1]}` : null;
 }
 
-const META_STATUSES = new Set([
-  'meta-proposal', 'meta-plan', 'meta-active', 'meta-done',
-]);
-
-const META_READY_STATUSES = new Set(['meta-proposal', 'meta-plan', 'meta-active']);
-
-function readStatus(filepath) {
+// Returns { status, hasKindBasic, hasKindEpic, parent_task_id } from a task file.
+function readTaskMeta(filepath) {
   try {
     const content = fs.readFileSync(filepath, 'utf8');
-    for (const line of content.split('\n')) {
-      const s = line.trim().toLowerCase();
-      if (s.startsWith('status:')) return s.slice('status:'.length).trim();
+    const m = content.match(/^---\n([\s\S]*?)^---/m);
+    if (!m) return null;
+    const fm = m[1];
+
+    const statusMatch = fm.match(/^status:\s*(.+)$/m);
+    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+
+    const parentMatch = content.match(/^parent_task_id:\s*(.+)$/m);
+    const parent_task_id = parentMatch ? parentMatch[1].trim().toUpperCase() : null;
+
+    // Parse labels — support both inline [] and block list formats
+    let labels = [];
+    const inlineLabels = fm.match(/^labels:\s*\[([^\]]*)\]/m);
+    if (inlineLabels) {
+      labels = inlineLabels[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
+    } else {
+      // Block list: lines after "labels:" that start with "  - "
+      const blockMatch = fm.match(/^labels:\s*\n((?:  - .+\n?)*)/m);
+      if (blockMatch) {
+        labels = blockMatch[1].split('\n')
+          .map(l => l.replace(/^\s+-\s+/, '').trim())
+          .filter(Boolean);
+      }
     }
+
+    const hasKindBasic = labels.includes('kind:basic');
+    const hasKindEpic  = labels.includes('kind:epic');
+
+    return { status, hasKindBasic, hasKindEpic, parent_task_id };
   } catch { /* unreadable */ }
   return null;
 }
 
-function isReady(filepath) {
-  const status = readStatus(filepath);
-  if (status === null || META_STATUSES.has(status)) return false;
-  return status === 'ready';
+function isBasicReady(filepath) {
+  const meta = readTaskMeta(filepath);
+  if (!meta) return false;
+  // Must have kind:basic label and NOT kind:epic, and status must be "Basic: Ready"
+  return meta.hasKindBasic && !meta.hasKindEpic && meta.status === BASIC_READY_STATUS;
 }
 
-function isMetaReady(filepath) {
-  const status = readStatus(filepath);
-  return status !== null && META_READY_STATUSES.has(status);
-}
-
-function scanReadyIds(tasksDir) {
+function scanBasicReadyIds(tasksDir) {
   const ready = new Set();
   let entries;
   try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue;
     const id = parseTaskId(entry);
-    if (id && isReady(path.join(tasksDir, entry))) ready.add(id);
+    if (id && isBasicReady(path.join(tasksDir, entry))) ready.add(id);
   }
   return ready;
 }
 
-function scanMetaReadyIds(tasksDir) {
-  const ready = new Map();
-  let entries;
-  try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
-  for (const entry of entries) {
-    if (!entry.endsWith('.md')) continue;
-    const id = parseTaskId(entry);
-    if (!id) continue;
-    const status = readStatus(path.join(tasksDir, entry));
-    if (status !== null && META_READY_STATUSES.has(status)) ready.set(id, status);
-  }
-  return ready;
-}
-
-const args = parseArgs(process.argv);
+const args       = parseArgs(process.argv);
 const intervalMs = Math.round(args.interval * 1000);
 
 const pidDir = path.dirname(args.pidFile);
@@ -426,32 +507,25 @@ if (pidDir) fs.mkdirSync(pidDir, { recursive: true });
 fs.writeFileSync(args.pidFile, String(process.pid));
 
 function removePid() { try { fs.unlinkSync(args.pidFile); } catch { /* gone */ } }
-process.on('exit', removePid);
+process.on('exit',    removePid);
 process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT',  () => process.exit(0));
 
-const notified     = new Set();
-const metaNotified = new Map(); // id → lastSeenStatus; re-emits on status change
+const notified = new Set(); // IDs we have already emitted basic-ready for
 
 const timer = setInterval(() => {
   if (fs.existsSync(args.stopFile)) { clearInterval(timer); process.exit(0); }
 
-  const readyIds = scanReadyIds(args.tasksDir);
-  for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
-  for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
-    process.stdout.write(`task-ready:${id}\n`);
-    notified.add(id);
-  }
+  // Basic channel: emit basic-ready for kind:basic tasks at Basic: Ready
+  const readyIds = scanBasicReadyIds(args.tasksDir);
 
-  // L1 channel: meta-ready (Meta-Proposal, Meta-Plan, Meta-Active)
-  // Re-emits whenever status changes within META_READY_STATUSES (e.g. Proposal→Plan→Active)
-  const metaReadyIds = scanMetaReadyIds(args.tasksDir);
-  for (const [id] of metaNotified) { if (!metaReadyIds.has(id)) metaNotified.delete(id); }
-  for (const [id, status] of [...metaReadyIds].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (metaNotified.get(id) !== status) {
-      process.stdout.write(`meta-ready:${id}\n`);
-      metaNotified.set(id, status);
-    }
+  // Evict IDs that are no longer in ready state
+  for (const id of notified) { if (!readyIds.has(id)) notified.delete(id); }
+
+  // Emit new ready IDs (sorted for determinism)
+  for (const id of [...readyIds].filter(id => !notified.has(id)).sort()) {
+    process.stdout.write(`basic-ready:${id}\n`);
+    notified.add(id);
   }
 }, intervalMs);
 DAEMON_EOF
@@ -461,18 +535,18 @@ fi
 
 ### ensureDaemonTest
 
-Write the unit-test file `scripts/loop-backlog-daemon.test.js` if it does not exist,
-then run it. Tests cover the three pure helper functions. Run this immediately after
+Write the unit-test file `scripts/basic-daemon.test.js` if it does not exist,
+then run it. Tests cover the pure helper functions. Run this immediately after
 `ensureDaemonScript` so a broken daemon is caught before the daemon is launched.
 
 ```bash
-TEST_SCRIPT="${REPO_ROOT}/scripts/loop-backlog-daemon.test.js"
+TEST_SCRIPT="${REPO_ROOT}/scripts/basic-daemon.test.js"
 
 if [ ! -f "$TEST_SCRIPT" ]; then
   cat > "$TEST_SCRIPT" << 'TEST_EOF'
 #!/usr/bin/env node
-// Unit tests for loop-backlog-daemon.js helper functions.
-// Run with: node scripts/loop-backlog-daemon.test.js
+// Unit tests for basic-daemon.js helper functions.
+// Run with: node scripts/basic-daemon.test.js
 'use strict';
 const fs   = require('fs');
 const path = require('path');
@@ -483,31 +557,38 @@ const os   = require('os');
 function parseTaskId(filename) {
   const base = path.basename(filename, path.extname(filename)).toUpperCase();
   for (const part of base.split(/\s+/)) {
-    if (/^TASK-\d+$/.test(part)) return part;
+    if (/^TASK-\d+(\.\d+)*$/.test(part)) return part;
   }
-  const m = base.match(/\bTASK-(\d+)\b/);
+  const m = base.match(/\bTASK-(\d+(?:\.\d+)*)\b/);
   return m ? `TASK-${m[1]}` : null;
 }
 
-function isReady(filepath) {
+function isBasicReady(filepath) {
   try {
     const content = fs.readFileSync(filepath, 'utf8');
-    for (const line of content.split('\n')) {
-      const s = line.trim().toLowerCase();
-      if (s === 'status: ready' || s.startsWith('status: ready')) return true;
+    const m = content.match(/^---\n([\s\S]*?)^---/m);
+    if (!m) return false;
+    const fm = m[1];
+    const statusMatch = fm.match(/^status:\s*(.+)$/m);
+    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : null;
+    if (status !== 'basic: ready') return false;
+    const inlineLabels = fm.match(/^labels:\s*\[([^\]]*)\]/m);
+    if (inlineLabels) {
+      const labels = inlineLabels[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
+      return labels.includes('kind:basic') && !labels.includes('kind:epic');
     }
   } catch { /* unreadable */ }
   return false;
 }
 
-function scanReadyIds(tasksDir) {
+function scanBasicReadyIds(tasksDir) {
   const ready = new Set();
   let entries;
   try { entries = fs.readdirSync(tasksDir); } catch { return ready; }
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue;
     const id = parseTaskId(entry);
-    if (id && isReady(path.join(tasksDir, entry))) ready.add(id);
+    if (id && isBasicReady(path.join(tasksDir, entry))) ready.add(id);
   }
   return ready;
 }
@@ -529,40 +610,45 @@ assert('embedded id',         parseTaskId('sprint-TASK-7-notes.md'),            
 assert('no id returns null',  parseTaskId('README.md'),                            null);
 assert('multi-digit',         parseTaskId('task-42 - long title here.md'),         'TASK-42');
 
-// ── isReady ───────────────────────────────────────────────────────────────────
-process.stdout.write('isReady\n');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbd-test-'));
+// ── isBasicReady ──────────────────────────────────────────────────────────────
+process.stdout.write('isBasicReady\n');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-test-'));
 
-const readyFile = path.join(tmp, 'ready.md');
-fs.writeFileSync(readyFile, '# Task\nStatus: Ready\nSome body\n');
-assert('status ready (mixed case)', isReady(readyFile), true);
+const basicReadyFile = path.join(tmp, 'ready.md');
+fs.writeFileSync(basicReadyFile,
+  '---\nstatus: Basic: Ready\nlabels: [kind:basic]\n---\n# Task\n');
+assert('basic ready with kind:basic', isBasicReady(basicReadyFile), true);
+
+const epicFile = path.join(tmp, 'epic.md');
+fs.writeFileSync(epicFile,
+  '---\nstatus: Basic: Ready\nlabels: [kind:basic, kind:epic]\n---\n# Task\n');
+assert('kind:epic excluded', isBasicReady(epicFile), false);
 
 const doneFile = path.join(tmp, 'done.md');
-fs.writeFileSync(doneFile, '# Task\nStatus: Done\n');
-assert('status done → false', isReady(doneFile), false);
+fs.writeFileSync(doneFile,
+  '---\nstatus: Basic: Done\nlabels: [kind:basic]\n---\n# Task\n');
+assert('basic done → false', isBasicReady(doneFile), false);
 
-const emptyFile = path.join(tmp, 'empty.md');
-fs.writeFileSync(emptyFile, '');
-assert('empty file → false', isReady(emptyFile), false);
-
-assert('missing file → false', isReady(path.join(tmp, 'ghost.md')), false);
-
-// ── scanReadyIds ──────────────────────────────────────────────────────────────
-process.stdout.write('scanReadyIds\n');
+// ── scanBasicReadyIds ─────────────────────────────────────────────────────────
+process.stdout.write('scanBasicReadyIds\n');
 const dir = path.join(tmp, 'tasks');
 fs.mkdirSync(dir);
 
-fs.writeFileSync(path.join(dir, 'task-1 - alpha.md'), 'Status: Ready\n');
-fs.writeFileSync(path.join(dir, 'task-2 - beta.md'),  'Status: Done\n');
-fs.writeFileSync(path.join(dir, 'task-3 - gamma.md'), 'Status: Ready\n');
-fs.writeFileSync(path.join(dir, 'not-a-task.txt'),    'Status: Ready\n');  // ignored
+fs.writeFileSync(path.join(dir, 'task-1 - alpha.md'),
+  '---\nstatus: Basic: Ready\nlabels: [kind:basic]\n---\n');
+fs.writeFileSync(path.join(dir, 'task-2 - beta.md'),
+  '---\nstatus: Basic: Done\nlabels: [kind:basic]\n---\n');
+fs.writeFileSync(path.join(dir, 'task-3 - gamma.md'),
+  '---\nstatus: Basic: Ready\nlabels: [kind:basic]\n---\n');
+fs.writeFileSync(path.join(dir, 'not-a-task.txt'),
+  '---\nstatus: Basic: Ready\nlabels: [kind:basic]\n---\n');  // ignored
 
-const ids = scanReadyIds(dir);
-assert('finds ready tasks',   [...ids].sort(), ['TASK-1', 'TASK-3']);
-assert('skips done tasks',    ids.has('TASK-2'), false);
-assert('skips non-md files',  ids.size, 2);
+const ids = scanBasicReadyIds(dir);
+assert('finds basic ready tasks', [...ids].sort(), ['TASK-1', 'TASK-3']);
+assert('skips done tasks',        ids.has('TASK-2'), false);
+assert('skips non-md files',      ids.size, 2);
 
-assert('missing dir → empty', [...scanReadyIds(path.join(tmp, 'no-such-dir'))].length, 0);
+assert('missing dir → empty', [...scanBasicReadyIds(path.join(tmp, 'no-such-dir'))].length, 0);
 
 // ── cleanup + result ──────────────────────────────────────────────────────────
 fs.rmSync(tmp, { recursive: true });
@@ -577,15 +663,16 @@ node "$TEST_SCRIPT"
 
 ### daemonBootstrap
 
-Start the task-watcher daemon if not already running. The daemon polls `backlog/tasks/`
-and writes `task-ready:TASK-N` lines to stdout, which Monitor picks up as events.
+Start the basic-daemon if not already running. The daemon polls `backlog/tasks/`
+for `kind:basic` tasks at `Basic: Ready` status, and writes `basic-ready:TASK-N`
+lines to stdout, which Monitor picks up as events.
 
 ```bash
 BACKLOG_DIR="${REPO_ROOT}/backlog"
-PID_FILE="${BACKLOG_DIR}/.daemon.pid"
+PID_FILE="${BACKLOG_DIR}/.basic-daemon.pid"
 STOP_FILE="${BACKLOG_DIR}/.loop-stop"
 TASKS_DIR="${BACKLOG_DIR}/tasks"
-DAEMON_LOG="${BACKLOG_DIR}/.daemon.log"
+DAEMON_LOG="${BACKLOG_DIR}/.basic-daemon.log"
 
 # Remove stale stop sentinel from a previous run
 rm -f "$STOP_FILE"
@@ -596,12 +683,12 @@ if [ -f "$PID_FILE" ]; then
   DPID=$(cat "$PID_FILE" 2>/dev/null || true)
   if [ -n "$DPID" ] && kill -0 "$DPID" 2>/dev/null; then
     DAEMON_RUNNING=true
-    echo "daemonBootstrap: daemon already running (pid $DPID)"
+    echo "daemonBootstrap: basic-daemon already running (pid $DPID)"
   fi
 fi
 
 if [ "$DAEMON_RUNNING" = "false" ]; then
-  nohup node "${REPO_ROOT}/scripts/loop-backlog-daemon.js" \
+  nohup node "${REPO_ROOT}/scripts/basic-daemon.js" \
     --tasks-dir "$TASKS_DIR" \
     --pid-file  "$PID_FILE"  \
     --stop-file "$STOP_FILE" \
@@ -610,14 +697,14 @@ if [ "$DAEMON_RUNNING" = "false" ]; then
   # Poll for PID file instead of fixed sleep (handles slow Node cold-starts)
   for i in $(seq 1 25); do [ -f "$PID_FILE" ] && break; sleep 0.2; done
   DPID=$(cat "$PID_FILE" 2>/dev/null || true)
-  echo "daemonBootstrap: started daemon (pid ${DPID:-unknown})"
+  echo "daemonBootstrap: started basic-daemon (pid ${DPID:-unknown})"
 fi
 ```
 
 ### reap
 
 ```bash
-backlog task list --status "In Progress" --plain \
+backlog task list --status "Basic: In Progress" --plain \
   | grep -oP 'TASK-\d+' \
   | while read TASK_ID; do
     VIEW=$(backlog task view "$TASK_ID" --plain)
@@ -627,7 +714,7 @@ backlog task list --status "In Progress" --plain \
       AGE=$(( $(date -u +%s) - $(date -u -d "$CLAIMED" +%s 2>/dev/null || echo 0) ))
     fi
     if [ $AGE -gt 1800 ]; then
-      backlog task edit "$TASK_ID" --status "Ready" \
+      backlog task edit "$TASK_ID" --status "Basic: Ready" \
         --append-notes "Requeued by reaper: in-progress timeout exceeded 30 minutes."
       PROJECT_NAME=$(basename "$REPO_ROOT")
       WORKTREE="${REPO_ROOT}/../${PROJECT_NAME}-${TASK_ID}"
@@ -639,8 +726,9 @@ backlog task list --status "In Progress" --plain \
 
 ### claimBatch
 
-Claim up to `CFG_MAX_PARALLEL` Ready tasks atomically. Returns the list of claimed task IDs
-in `CLAIMED_TASK_IDS` (space-separated). If fewer Ready tasks exist, claims only those.
+Claim up to `CFG_MAX_PARALLEL` `Basic: Ready` tasks atomically. Returns the list of claimed
+task IDs in `CLAIMED_TASK_IDS` (space-separated). Writes `cap:claim=started` for each claimed
+task. If fewer `Basic: Ready` tasks exist, claims only those.
 
 ```bash
 CLAIMED_TASK_IDS=""
@@ -648,16 +736,20 @@ CLAIM_COUNT=0
 while IFS= read -r CANDIDATE_ID; do
   [ -z "$CANDIDATE_ID" ] && continue
   [ "$CLAIM_COUNT" -ge "$CFG_MAX_PARALLEL" ] && break
-  backlog task edit "$CANDIDATE_ID" --status "In Progress" \
+  backlog task edit "$CANDIDATE_ID" --status "Basic: In Progress" \
     --append-notes "claimed: $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || continue
+  # Write cap:claim=started idempotency marker
+  mkdir -p "${REPO_ROOT}/backlog/.caps"
+  echo "cap:claim=started $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >> "${REPO_ROOT}/backlog/.caps/${CANDIDATE_ID}"
   CLAIMED_TASK_IDS="${CLAIMED_TASK_IDS} ${CANDIDATE_ID}"
   CLAIM_COUNT=$((CLAIM_COUNT + 1))
-done < <(backlog task list --status "Ready" --plain | grep -oP 'TASK-\d+')
+done < <(backlog task list --status "Basic: Ready" --plain | grep -oP 'TASK-\d+')
 CLAIMED_TASK_IDS=$(echo "$CLAIMED_TASK_IDS" | xargs)  # trim whitespace
 ```
 
 If `CLAIMED_TASK_IDS` is empty and no stop sentinel: use Monitor (persistent) to wait for
-the next `task-ready` event. The daemon writes `task-ready:TASK-N` lines to `$DAEMON_LOG`;
+the next `basic-ready` event. The daemon writes `basic-ready:TASK-N` lines to `$DAEMON_LOG`;
 Monitor tails that file:
 
 ```bash
@@ -665,7 +757,7 @@ Monitor tails that file:
 Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
 ```
 
-Any output line matching `task-ready:TASK-*` is the wake-up signal; re-enter `workerLoop()`.
+Any output line matching `basic-ready:TASK-*` is the wake-up signal; re-enter `workerLoop()`.
 
 ### waitForAgents
 
@@ -908,9 +1000,18 @@ if git merge --no-ff "$BRANCH" -m "merge: ${TITLE} (${TASK_ID})"; then
 ### Execution Log
 $(echo -e "$EXECUTION_LOG")"
   backlog task edit "$TASK_ID" \
-    --status "Done" \
+    --status "Basic: Done" \
     --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --final-summary "$FINAL_SUMMARY"
+  # Write terminal idempotency marker
+  echo "cap:execute=done $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
+  # notifyParentIfAny: check parent_task_id field
+  PARENT=$(backlog task view "$TASK_ID" --plain | grep -oP '(?<=parent_task_id: )TASK-\S+' | head -1)
+  if [ -n "$PARENT" ]; then
+    backlog task edit "$PARENT" --append-notes \
+      "Sub-task ${TASK_ID} completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   git worktree remove "$WORKTREE"
   git branch -d "$BRANCH"
   WORK_DONE=true
@@ -933,10 +1034,13 @@ git worktree remove ${WORKTREE}
 git branch -d ${BRANCH}
 \`\`\`"
   backlog task edit "$TASK_ID" \
-    --status "Needs Human" \
+    --status "Basic: Needs Human" \
     --append-notes "Merge conflict: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --final-summary "$FINAL_SUMMARY"
-  echo "⚠️  Merge conflict: $TASK_ID — worktree preserved at $WORKTREE"
+  # Write cap:merge=failed idempotency marker
+  echo "cap:merge=failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
+  echo "Merge conflict: $TASK_ID — worktree preserved at $WORKTREE"
   WORK_DONE=false
 fi
 ```
@@ -948,14 +1052,14 @@ The top-level orchestration using claimBatch, background Agent spawning, and ser
 ```bash
 # After loadConfig, ensureDaemonScript, daemonBootstrap, and reap have run:
 
-# 1. Claim a batch of up to CFG_MAX_PARALLEL Ready tasks
+# 1. Claim a batch of up to CFG_MAX_PARALLEL Basic: Ready tasks
 # (claimBatch sets CLAIMED_TASK_IDS)
 
 if [ -z "$CLAIMED_TASK_IDS" ]; then
   # No ready tasks — block on daemon event
   # Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
-  # On task-ready:TASK-N event: re-enter workerLoop
-  # meta-ready:* lines are silently ignored — handled by loop-meta in its own session
+  # On basic-ready:TASK-N event: re-enter workerLoop
+  # epic-ready:* lines are silently ignored — handled by loop-meta in its own session
   exit 0
 fi
 
@@ -1031,21 +1135,36 @@ for TASK_ID in $CLAIMED_TASK_IDS; do
     # Standard merge path (same as existing merge section)
     if git merge --no-ff "$BRANCH" -m "merge: ${TITLE} (${TASK_ID})"; then
       backlog task edit "$TASK_ID" \
-        --status "Done" \
+        --status "Basic: Done" \
         --append-notes "Completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      # Write cap:execute=done marker
+      echo "cap:execute=done $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
+      # notifyParentIfAny: check parent_task_id in task frontmatter
+      PARENT=$(backlog task view "$TASK_ID" --plain | grep -oP '(?<=parent_task_id: )TASK-\S+' | head -1)
+      if [ -n "$PARENT" ]; then
+        backlog task edit "$PARENT" --append-notes \
+          "Sub-task ${TASK_ID} completed: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      fi
       git worktree remove "$WORKTREE"
       git branch -d "$BRANCH"
     else
       backlog task edit "$TASK_ID" \
-        --status "Needs Human" \
+        --status "Basic: Needs Human" \
         --append-notes "Merge conflict: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      # Write cap:merge=failed marker
+      echo "cap:merge=failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
     fi
   else
     REASON=$(echo "$SIGNAL_CONTENT" | sed 's/^needs-human: //')
     backlog task edit "$TASK_ID" \
-      --status "Needs Human" \
+      --status "Basic: Needs Human" \
       --append-notes "Escalated: ${REASON}
-To continue: answer in Implementation Notes, then set status → Ready."
+To continue: answer in Implementation Notes, then set status → Basic: Ready."
+    # Write cap:execute=failed marker
+    echo "cap:execute=failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
   fi
 done
 ```
@@ -1093,11 +1212,14 @@ git worktree remove ${WORKTREE} --force
 git branch -D ${BRANCH}
 \`\`\`"
 backlog task edit "$TASK_ID" \
-  --status "Needs Human" \
+  --status "Basic: Needs Human" \
   --append-notes "Stuck on DoD #${STUCK_INDEX}: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --final-summary "$FINAL_SUMMARY"
-echo "❌ Stuck: $TASK_ID (DoD #$STUCK_INDEX)"
-echo "Task moved to Needs Human. Worktree preserved at $WORKTREE"
+# Write cap:execute=failed marker
+echo "cap:execute=failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  >> "${REPO_ROOT}/backlog/.caps/${TASK_ID}"
+echo "Stuck: $TASK_ID (DoD #$STUCK_INDEX)"
+echo "Task moved to Basic: Needs Human. Worktree preserved at $WORKTREE"
 WORK_DONE=false
 ```
 
@@ -1109,7 +1231,7 @@ To stop the worker loop, write the stop sentinel:
 touch "${REPO_ROOT}/backlog/.loop-stop"
 ```
 
-The daemon (`loop-backlog-daemon.js`) detects `backlog/.loop-stop` and exits.
+The basic-daemon (`basic-daemon.js`) detects `backlog/.loop-stop` and exits.
 The skill also checks for this file at the top of each iteration and returns `Stopped`
 without re-entering Monitor.
 
@@ -1121,11 +1243,11 @@ rm -f "${REPO_ROOT}/backlog/.loop-stop"
 ```
 
 The `daemonBootstrap` section will restart the daemon automatically on the next
-`/loop-backlog` invocation. The PID file (`backlog/.daemon.pid`) is managed
+`/loop-backlog` invocation. The PID file (`backlog/.basic-daemon.pid`) is managed
 by the daemon itself and removed on exit.
 
-Use `Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")` to wait for task-ready
-events. The daemon appends `task-ready:TASK-N` lines to `backlog/.daemon.log`; `tail -f`
+Use `Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")` to wait for basic-ready
+events. The daemon appends `basic-ready:TASK-N` lines to `backlog/.basic-daemon.log`; `tail -f`
 runs in the foreground so Monitor receives each line as an event immediately.
 The daemon subprocess exits only when `backlog/.loop-stop` is written (or the parent process dies).
 

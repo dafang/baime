@@ -1,7 +1,7 @@
 ---
 id: TASK-25
 title: 为 prompt engineering artifact（SKILL.md）建设分层自动测试与验证框架
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 01:58'
 updated_date: '2026-06-18 04:22'

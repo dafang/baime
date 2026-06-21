@@ -1,7 +1,7 @@
 ---
 id: TASK-34
 title: 重构 build-quality-gates：提炼 P1 契约，将 P3 内容降级为 Implementation reference
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 12:54'
 updated_date: '2026-06-18 12:58'

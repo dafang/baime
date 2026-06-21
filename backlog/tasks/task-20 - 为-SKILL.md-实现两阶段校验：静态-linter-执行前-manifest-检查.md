@@ -1,7 +1,7 @@
 ---
 id: TASK-20
 title: 为 SKILL.md 实现两阶段校验：静态 linter + 执行前 manifest 检查
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-17 22:25'
 updated_date: '2026-06-18 10:15'

@@ -6,6 +6,20 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TASKS_DIR="$REPO_ROOT/backlog/tasks"
 
+# Parse optional --tasks-dir argument
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tasks-dir)
+            TASKS_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
 MIGRATED=0
 SKIPPED=0
 ERRORS=0
@@ -75,11 +89,12 @@ frontmatter = m.group(2)
 front_end = m.group(3)
 rest = content[m.end():]
 
-# Replace status line
+# Replace status line, quoting value if it contains ': ' to produce valid YAML
 def replace_status(fm, new_s):
+    quoted = '"' + new_s + '"' if ': ' in new_s else new_s
     return re.sub(
         r'^(status:\s*)(.+)$',
-        lambda m: m.group(1) + new_s,
+        lambda m: m.group(1) + quoted,
         fm,
         flags=re.MULTILINE
     )

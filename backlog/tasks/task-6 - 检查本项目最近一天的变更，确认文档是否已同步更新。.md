@@ -1,7 +1,7 @@
 ---
 id: TASK-6
 title: 检查本项目最近一天的变更，确认文档是否已同步更新。
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-17 05:47'
 updated_date: '2026-06-17 07:51'

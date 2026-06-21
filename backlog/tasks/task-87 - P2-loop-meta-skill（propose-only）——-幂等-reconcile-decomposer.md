@@ -1,7 +1,7 @@
 ---
 id: TASK-87
 title: 'P2: loop-meta skill（propose-only）—— 幂等 reconcile + decomposer'
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-20 06:04'
 updated_date: '2026-06-20 06:48'

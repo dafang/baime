@@ -1,7 +1,7 @@
 ---
 id: TASK-4
 title: 使用 meta-cc 检查本项目历史，更新 backlog+loop 使用文档
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-16 16:15'
 updated_date: '2026-06-16 16:25'

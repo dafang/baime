@@ -1,7 +1,7 @@
 ---
 id: TASK-86
 title: 'P1: Meta 泳道 + daemon `meta-ready` 事件 + L0 过滤'
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-20 06:03'
 updated_date: '2026-06-20 06:44'

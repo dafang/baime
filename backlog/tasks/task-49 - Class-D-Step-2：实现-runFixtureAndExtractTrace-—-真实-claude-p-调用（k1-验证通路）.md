@@ -1,7 +1,7 @@
 ---
 id: TASK-49
 title: Class D Step 2：实现 runFixtureAndExtractTrace — 真实 claude -p 调用（k=1 验证通路）
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 15:12'
 updated_date: '2026-06-19 16:13'

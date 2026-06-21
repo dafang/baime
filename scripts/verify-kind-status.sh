@@ -2,10 +2,25 @@
 # verify-kind-status.sh — Verify all backlog/tasks/*.md have kind:basic XOR kind:epic
 # and status within the correct column subset.
 # Emits "column-overlap-violation: <file>" on violations. Exits non-zero on any violation.
+# Usage: verify-kind-status.sh [--tasks-dir <path>]
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TASKS_DIR="$REPO_ROOT/backlog/tasks"
+
+# Parse optional --tasks-dir argument
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tasks-dir)
+      TASKS_DIR="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
 VIOLATIONS=0
 CHECKED=0
@@ -34,6 +49,14 @@ check_file() {
     local file="$1"
     local basename
     basename="$(basename "$file")"
+
+    # Strict YAML parse: extract frontmatter and validate with PyYAML
+    local frontmatter
+    frontmatter=$(awk '/^---$/{if(++n==1) next; if(n==2) exit} n==1{print}' "$file")
+    if ! python3 -c "import yaml, sys; yaml.safe_load(sys.stdin.read())" <<< "$frontmatter" 2>/dev/null; then
+        echo "  FAIL yaml-parse-error: $basename"
+        return 1
+    fi
 
     python3 - "$file" <<'PYEOF'
 import sys, re

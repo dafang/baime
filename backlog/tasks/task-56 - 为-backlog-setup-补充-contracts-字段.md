@@ -1,7 +1,7 @@
 ---
 id: TASK-56
 title: 为 backlog-setup 补充 contracts 字段
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19'
 updated_date: '2026-06-20 00:46'

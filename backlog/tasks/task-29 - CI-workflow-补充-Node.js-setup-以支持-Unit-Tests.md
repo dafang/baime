@@ -1,7 +1,7 @@
 ---
 id: TASK-29
 title: CI workflow 补充 Node.js setup 以支持 Unit Tests
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 06:41'
 updated_date: '2026-06-18 06:52'

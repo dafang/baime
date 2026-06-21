@@ -1,7 +1,7 @@
 ---
 id: TASK-5
 title: 'loop-backlog: daemon + Monitor 替代 ScheduleWakeup 实现事件驱动触发'
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-17 03:58'
 updated_date: '2026-06-17 04:20'

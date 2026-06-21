@@ -1,7 +1,7 @@
 ---
 id: TASK-41
 title: Exp-E：Exp-B Class B fixture 审计与 reviewPlan Oracle 重标定
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 10:40'
 updated_date: '2026-06-19 11:42'

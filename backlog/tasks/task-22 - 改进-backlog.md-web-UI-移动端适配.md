@@ -1,7 +1,7 @@
 ---
 id: TASK-22
 title: 改进 backlog.md web UI 移动端适配
-status: Basic: Backlog
+status: "Basic: Backlog"
 assignee: []
 created_date: '2026-06-18 01:12'
 updated_date: '2026-06-18 01:21'

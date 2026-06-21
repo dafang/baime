@@ -1,7 +1,7 @@
 ---
 id: TASK-37
 title: Exp-A：task-from-template P3 内容消融实验
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 08:53'
 updated_date: '2026-06-19 09:44'

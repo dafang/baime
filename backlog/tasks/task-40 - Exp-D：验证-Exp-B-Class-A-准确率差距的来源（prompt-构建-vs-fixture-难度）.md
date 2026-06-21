@@ -1,7 +1,7 @@
 ---
 id: TASK-40
 title: Exp-D：验证 Exp-B Class A 准确率差距的来源（prompt 构建 vs fixture 难度）
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 10:39'
 updated_date: '2026-06-19 11:29'

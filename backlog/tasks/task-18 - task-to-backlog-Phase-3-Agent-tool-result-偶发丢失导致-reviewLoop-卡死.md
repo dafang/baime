@@ -1,7 +1,7 @@
 ---
 id: TASK-18
 title: task-to-backlog Phase 3 Agent tool result 偶发丢失导致 reviewLoop 卡死
-status: Basic: Proposal
+status: "Basic: Proposal"
 assignee: []
 created_date: '2026-06-17 16:22'
 updated_date: '2026-06-18 02:27'

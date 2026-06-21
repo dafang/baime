@@ -1,7 +1,7 @@
 ---
 id: TASK-15
 title: 修复 reviewPlan 从 λ 入口不可达的问题
-status: Basic: Proposal
+status: "Basic: Proposal"
 assignee: []
 created_date: '2026-06-17 16:04'
 updated_date: '2026-06-18 02:27'

@@ -1,7 +1,7 @@
 ---
 id: TASK-88
 title: 'P3: evaluator（切片聚合）+ replanner + ROI 闸门测量'
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-20 06:04'
 updated_date: '2026-06-20 06:51'

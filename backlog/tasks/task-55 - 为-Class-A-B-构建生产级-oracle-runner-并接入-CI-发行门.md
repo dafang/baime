@@ -1,7 +1,7 @@
 ---
 id: TASK-55
 title: 为 Class A/B 构建生产级 oracle runner 并接入 CI 发行门
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19'
 updated_date: '2026-06-20 00:56'

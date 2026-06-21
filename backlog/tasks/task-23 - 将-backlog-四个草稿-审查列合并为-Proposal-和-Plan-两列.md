@@ -1,7 +1,7 @@
 ---
 id: TASK-23
 title: 将 backlog 四个草稿/审查列合并为 Proposal 和 Plan 两列
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 01:37'
 updated_date: '2026-06-18 02:29'

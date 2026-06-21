@@ -1,6 +1,6 @@
 ---
 name: loop-meta
-description: "Autonomous L1 Meta-planner for the backlog Meta lane. Responds to meta-ready events, decomposes meta-tasks into backlog sub-tasks via decomposer subagent (using task-to-backlog / feature-to-backlog), and idempotently reconciles desired vs actual sub-task state. Sub-tasks are created in Backlog status for human promotion to Ready. Escalates on budget, noProgress, or diverging conditions."
+description: "Autonomous L1 Epic Worker for the B″ epic channel. Listens to epic-ready: events emitted by scripts/epic-daemon.js for kind:epic tasks at active Epic:* statuses (Epic: Proposal, Epic: Plan, Epic: Decomposing, Epic: Awaiting Children, Epic: Evaluating). Drives the epicDAG state machine: reviews proposal/plan, decomposes into child tasks via decomposer subagent, performs three-way reconcile (desired vs created vs done), evaluates outcome via evaluateProcessor. Writes cap:* idempotency markers at every state transition. Escalates on budget, noProgress, diverging (reconcileRunCount >= 3), or Escalated evaluate verdict → Epic: Needs Human."
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor, Agent
 contracts:
   - grep: "idempotentReconcile"
@@ -9,7 +9,9 @@ contracts:
     target: self
   - grep: "Needs Human"
     target: self
-  - grep: "meta-ready"
+  - grep: "epic-ready"
+    target: self
+  - grep: "epic-daemon"
     target: self
   - not-grep: "git worktree add"
     target: self
@@ -69,40 +71,222 @@ contracts:
 
 ## Spec
 
+-- B″ epic channel: loop-meta now listens to epic-ready: events from scripts/epic-daemon.js.
+-- The basic-ready: channel (for kind:basic tasks) is handled by loop-backlog independently.
+
+data EpicStatus = EpicProposal | EpicPlan | EpicDecomposing | EpicAwaitingChildren | EpicEvaluating | EpicDone | EpicNeedsHuman
 data MetaStatus = MetaProposal | MetaPlan | MetaActive | MetaDone | NeedsHuman
 
 data Outcome = Proposed | Reconciled | Escalated Reason | Idle | Stopped
 
--- metaWorkerLoop: top-level event loop. Ensures the shared daemon is running,
--- processes existing meta-tasks on startup (catch-up), then blocks on Monitor
--- for meta-ready events. Runs in its own Claude Code session, independent of
--- loop-backlog. Stop via backlog/.loop-meta-stop or the shared backlog/.loop-stop.
+-- epicDAG: state machine for kind:epic tasks (B″ board)
+--
+--   Epic: Proposal     → reviewLoop (proposal doc) → advance to Epic: Plan
+--                        write cap:propose=approved on approval
+--
+--   Epic: Plan         → reviewLoop (plan doc)     → advance to Epic: Decomposing
+--                        write cap:plan=approved on approval
+--
+--   Epic: Decomposing  → decompose into child tasks (kind:basic, status: "Basic: Backlog")
+--                        → advance to Epic: Awaiting Children
+--                        write cap:decompose=done
+--
+--   Epic: Awaiting Children → three-way reconcile (desired vs created vs done)
+--                             when all done → advance to Epic: Evaluating
+--                             write cap:await=done
+--
+--   Epic: Evaluating   → evaluateProcessor → Epic: Done | Epic: Needs Human | Epic: Decomposing
+--                        write cap:evaluate=done | cap:evaluate=escalated | cap:evaluate=revision
+--
+-- Terminal statuses: Epic: Done, Epic: Needs Human (not re-emitted by epic-daemon.js)
+
+-- metaWorkerLoop: top-level event loop. Starts scripts/epic-daemon.js (B″ epic channel),
+-- processes existing epic-tasks on startup (catch-up), then blocks on Monitor
+-- for epic-ready: events. Runs in its own Claude Code session, independent of
+-- loop-backlog (which handles basic-ready: events). Stop via backlog/.loop-meta-stop
+-- or the shared backlog/.loop-stop.
 metaWorkerLoop :: () → Outcome
 metaWorkerLoop() = {
-  _:  daemonBootstrap(),
+  _:  daemonBootstrap(),   -- starts scripts/epic-daemon.js, pid: backlog/.epic-daemon.pid
   _:  catchUpScan(),
   loop:
     if (stopSentinel()): return Stopped,
     event: Monitor(persistent=true, command="tail -f -n 0 DAEMON_LOG"),
-    | stopSentinel()                → return Stopped
-    | event matches "meta-ready:*" → metaLoop(extractId(event)); loop
-    | otherwise                    → loop   -- ignore task-ready: and noise
+    | stopSentinel()                 → return Stopped
+    | event matches "epic-ready:*"  → epicLoop(extractId(event)); loop
+    | event matches "meta-ready:*"  → metaLoop(extractId(event)); loop  -- legacy meta lane
+    | otherwise                     → loop   -- ignore basic-ready: and noise
 }
 
--- catchUpScan: on startup, dispatch all existing meta-tasks immediately.
+-- catchUpScan: on startup, dispatch all existing epic-tasks and meta-tasks immediately.
 -- Prevents tasks created before this session started from being missed.
 catchUpScan :: () → ()
-catchUpScan() =
+catchUpScan() = {
+  -- B″ epic channel: scan active Epic:* statuses
+  ∀status ∈ {EpicProposal, EpicPlan, EpicDecomposing, EpicAwaitingChildren, EpicEvaluating}:
+    ∀id ∈ tasksWithStatus(status):
+      if (¬stopSentinel()): epicLoop(id),
+  -- legacy meta lane
   ∀status ∈ {MetaProposal, MetaPlan, MetaActive}:
     ∀id ∈ tasksWithStatus(status):
       if (¬stopSentinel()): metaLoop(id)
+}
 
 -- stopSentinel: true if either stop file exists.
 stopSentinel :: () → Bool
 stopSentinel() =
   exists("backlog/.loop-meta-stop") ∨ exists("backlog/.loop-stop")
 
--- Entry point: invoked when a meta-ready event is received for a meta-task.
+-- epicLoop: entry point invoked when an epic-ready: event is received for a kind:epic task.
+-- Routes to the appropriate epicDAG handler based on current Epic:* status.
+-- cap:* markers prevent double-processing within the same status.
+epicLoop :: TaskId → Outcome
+epicLoop(id) =
+  | stopSentinel()                        → Stopped
+  | status(id) == "Epic: Proposal"        → epicReviewProposal(id)
+  | status(id) == "Epic: Plan"            → epicReviewPlan(id)
+  | status(id) == "Epic: Decomposing"     → epicDecompose(id)
+  | status(id) == "Epic: Awaiting Children" → epicAwaitChildren(id)
+  | status(id) == "Epic: Evaluating"      → epicEvaluate(id)
+  | otherwise                             → Idle
+
+-- epicReviewProposal: review the proposal doc for the epic task.
+-- Uses reviewLoop (see spec-stdlib § reviewLoop) — max 4 iterations.
+-- On human approval (status set to Epic: Plan), writes cap:propose=approved.
+epicReviewProposal :: TaskId → Outcome
+epicReviewProposal(id) = {
+  if (hasCap(id, "propose")): return Idle,   -- idempotency: already processed
+  doc: readField(id, "description"),
+  _:   reviewLoop(id, doc, maxIter=4),        -- see spec-stdlib § reviewLoop
+  -- Human approves by setting status → Epic: Plan; daemon re-emits epic-ready:
+  return: Proposed
+}
+
+-- epicReviewPlan: review the implementation plan doc.
+-- Uses reviewLoop (see spec-stdlib § reviewLoop) — max 4 iterations.
+-- On human approval (status set to Epic: Decomposing), writes cap:plan=approved.
+epicReviewPlan :: TaskId → Outcome
+epicReviewPlan(id) = {
+  if (hasCap(id, "plan")): return Idle,
+  doc: readField(id, "implementationPlan"),
+  _:   reviewLoop(id, doc, maxIter=4),        -- see spec-stdlib § reviewLoop
+  appendNote(id, "cap:plan=approved"),
+  return: Proposed
+}
+
+-- epicDecompose: decompose the epic into child tasks (kind:basic, status: "Basic: Backlog").
+-- Each child carries parent_task_id: <epic-id> in frontmatter.
+-- Writes cap:decompose=done on completion; advances status to Epic: Awaiting Children.
+epicDecompose :: TaskId → Outcome
+epicDecompose(id) = {
+  if (hasCap(id, "decompose")): return Idle,   -- idempotency guard
+  if (¬empty(listChildren(id))):
+    appendNote(id, "epicDecompose: children already exist — skipping creation"),
+    appendNote(id, "cap:decompose=done"),
+    setStatus(id, "Epic: Awaiting Children"),
+    return Idle,
+  plan:  readField(id, "implementationPlan"),
+  subs:  decomposer(id, plan),
+  _:     ∀t ∈ subs: createSubTask(id, t),  -- kind:basic, status: Basic: Backlog, parent_task_id: id
+  _:     verifySubTaskDod(id),              -- R1 guard: no rubber-stampable children
+  _:     appendNote(id, "cap:decompose=done"),
+  _:     setStatus(id, "Epic: Awaiting Children"),
+  return: Proposed
+}
+
+-- epicAwaitChildren: three-way reconcile loop.
+-- desired: tasks listed in epic's plan (from decomposer)
+-- created: tasks with parent_task_id: <epic-id> in backlog
+-- done:    created tasks at Basic: Done status
+-- Action: create missing tasks; log excess; when done == desired → advance to Epic: Evaluating.
+-- Writes cap:await=done when all children are done.
+-- diverging condition: reconcileRunCount(id) >= 3 → escalate to Epic: Needs Human.
+epicAwaitChildren :: TaskId → Outcome
+epicAwaitChildren(id) = {
+  if (hasCap(id, "await")): return Idle,
+
+  desired: decomposer(id, readField(id, "implementationPlan")),
+  created: listChildren(id),   -- tasks with parent_task_id: id
+  done:    filter(c → status(c) == "Basic: Done", created),
+
+  -- three-way reconcile: create missing tasks
+  missing: desired ⊖ created,
+  ∀t ∈ missing: createSubTask(id, t),
+
+  -- log excess children (created beyond desired set)
+  excess: created ⊖ desired,
+  if (¬empty(excess)):
+    appendNote(id, "epicAwaitChildren: excess children=" + length(excess) + " — logged, not removed"),
+
+  -- diverging condition: reconcileRunCount >= 3 escalates
+  if (reconcileRunCount(id) >= 3 ∧ length(done) < length(desired)):
+    return: escalateEpic(id, "diverging: reconcileRunCount >= 3 and children not all done", "cap:escalate=diverging"),
+
+  -- completion: all desired children are done
+  if (length(done) == length(desired)):
+    appendNote(id, "cap:await=done"),
+    setStatus(id, "Epic: Evaluating"),
+    return: Reconciled,
+
+  appendNote(id, "epicAwaitChildren: done=" + length(done) + "/" + length(desired)
+               + " reconcileRunCount=" + reconcileRunCount(id)),
+  return: Reconciled
+}
+
+-- evaluateProcessor: evaluate outcome of all children (replaces evaluateAndReplan for epic lane).
+-- Produces one of three verdicts:
+--   Approved     → Epic: Done,          writes cap:evaluate=done
+--   Escalated    → Epic: Needs Human,   writes cap:evaluate=escalated
+--   NeedsRevision→ Epic: Decomposing,   writes cap:evaluate=revision (increments reconcileRunCount)
+evaluateProcessor :: TaskId → Outcome
+evaluateProcessor(id) = {
+  if (hasCap(id, "evaluate")): return Idle,
+
+  doneChildren: filter(c → status(c) == "Basic: Done", listChildren(id)),
+  needsHuman:   filter(c → status(c) == "Basic: Needs Human", doneChildren),
+
+  result: evaluator(id, doneChildren),
+
+  | result == Approved ∨ result == Met →
+      appendNote(id, "cap:evaluate=done"),
+      setStatus(id, "Epic: Done"),
+      return: Reconciled
+
+  | ¬empty(needsHuman) ∨ result == Escalated →
+      appendNote(id, "cap:evaluate=escalated"),
+      return: escalateEpic(id, "Escalated: some children in Basic: Needs Human — manual resolution required", "cap:evaluate=escalated")
+
+  | result == NeedsRevision →
+      appendNote(id, "cap:evaluate=revision"),
+      incrementReconcileRunCount(id),
+      setStatus(id, "Epic: Decomposing"),
+      return: Reconciled
+}
+
+-- epicEvaluate: wrapper that routes to evaluateProcessor.
+epicEvaluate :: TaskId → Outcome
+epicEvaluate(id) = evaluateProcessor(id)
+
+-- escalateEpic: set status to Epic: Needs Human, write cap marker, append escalation note.
+escalateEpic :: (TaskId, Reason, CapMarker) → Outcome
+escalateEpic(id, r, cap) = {
+  setStatus(id, "Epic: Needs Human"),
+  appendNote(id, cap),
+  appendNote(id, "Escalated: " + r
+               + "\nTo continue: resolve in notes and set status → previous active Epic:* status."),
+  return: Escalated(r)
+}
+
+-- reconcileRunCount: count of epicAwaitChildren reconcile cycles from task notes.
+reconcileRunCount :: TaskId → Int
+reconcileRunCount(id) =
+  countNotes(id, "epicAwaitChildren: done=")
+
+-- incrementReconcileRunCount: no-op (notes-based counting is self-incrementing).
+incrementReconcileRunCount :: TaskId → ()
+incrementReconcileRunCount(id) = ()   -- reconcileRunCount reads note count automatically
+
+-- Entry point: invoked when a meta-ready event is received for a meta-task (legacy lane).
 metaLoop :: TaskId → Outcome
 metaLoop(id) =
   | stopSentinel()         → Stopped
@@ -131,25 +315,12 @@ gateHuman(id, msg) = {
   -- loop-meta halts here; daemon will emit meta-ready again on next poll
 }
 
--- reviewLoop: iterative human-review gate for Meta-Proposal tasks.
--- Calls gateHuman each iteration. If the human advances status beyond
--- Meta-Proposal before maxIter is reached, the next meta-ready event will
--- dispatch to draftDecomposition or idempotentReconcile — reviewLoop is
--- not re-entered. If maxIter is exhausted without approval, escalates.
-reviewLoop :: (TaskId, Doc, Int) → Outcome
-reviewLoop(id, doc, maxIter) = {
-  iter: countNotes(id, "reviewLoop:"),
-
-  if (iter >= maxIter):
-    return: escalate(id, "reviewLoop exhausted: " + maxIter
-                       + " iterations without human approval"),
-
-  gateHuman(id, "reviewLoop: iteration " + (iter+1) + "/" + maxIter
-               + " — review proposal and set status → Meta-Plan to approve,"
-               + " or add feedback note and leave status unchanged for revision."),
-  appendNote(id, "reviewLoop: iteration " + str(iter+1) + " of " + str(maxIter)),
-  return: Proposed
-}
+-- reviewLoop: iterative human-review gate (for both epic and meta-lane proposal/plan tasks).
+-- see spec-stdlib § reviewLoop for canonical definition.
+-- Summary: calls gateHuman each iteration (max maxIter); escalates if exhausted without approval.
+-- Epic lane: human approval = setting status to the next Epic:* column (e.g. Epic: Proposal → Epic: Plan).
+-- Meta lane: human approval = setting status → Meta-Plan.
+-- reviewLoop -- see spec-stdlib § reviewLoop
 
 -- draftDecomposition: for Meta-Plan tasks, call decomposer subagent to produce
 -- the canonical desired sub-task list, create each as a Backlog child task,
@@ -266,6 +437,10 @@ escalate(id, r) = {
                + "\nTo continue: answer in notes and set status → Meta-Active."),
   return: Escalated(r)
 }
+
+-- escalateEpicDivergingNote: written when reconcileRunCount >= 3 and children not all done.
+-- Status is set to Epic: Needs Human. cap:escalate=diverging is written for idempotency.
+-- see also: escalateEpic() above.
 
 
 -- WIP_CAP: maximum number of sub-tasks in Ready or In Progress at any time.
@@ -391,36 +566,43 @@ Top-level event loop. Call once per Claude Code session — runs until a stop
 sentinel is written. Stop loop-meta only: `touch backlog/.loop-meta-stop`.
 Stop both workers: `touch backlog/.loop-stop`.
 
+daemonBootstrap starts `scripts/epic-daemon.js` (B″ epic channel) which emits
+`epic-ready:TASK-N` lines to its log file at `backlog/.epic-daemon.log`.
+The PID is written to `backlog/.epic-daemon.pid`.
+
 ```bash
 metaWorkerLoop() {
   BACKLOG_DIR="${REPO_ROOT}/backlog"
-  DAEMON_LOG="${BACKLOG_DIR}/.daemon.log"
+  DAEMON_LOG="${BACKLOG_DIR}/.epic-daemon.log"
+  PID_FILE="${BACKLOG_DIR}/.epic-daemon.pid"
   STOP_FILE="${BACKLOG_DIR}/.loop-stop"
   META_STOP_FILE="${BACKLOG_DIR}/.loop-meta-stop"
 
-  # 1. Ensure the shared daemon is running (idempotent — safe if loop-backlog already started it)
-  daemonBootstrap
+  # 1. Ensure scripts/epic-daemon.js is running (B″ epic channel)
+  #    idempotent — checks PID_FILE before starting
+  daemonBootstrap  # starts: node scripts/epic-daemon.js --pid-file backlog/.epic-daemon.pid
 
-  # 2. Catch-up: process meta-tasks that existed before this session started
+  # 2. Catch-up: process epic-tasks and meta-tasks that existed before this session started
   catchUpScan
 
   # 3. Stop check before entering event loop
   [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
 
-  # 4. Block on daemon log; dispatch meta-ready events, ignore everything else
+  # 4. Block on epic-daemon log; dispatch epic-ready: events, handle meta-ready: (legacy)
   Monitor(persistent=true, command="tail -f -n 0 \"$DAEMON_LOG\"")
   # -n 0: start from EOF, only follow NEW lines — prevents replaying history on restart
   # For each output line from Monitor:
-  #   - Matches meta-ready:TASK-N  → metaLoop "$TASK_ID"
-  #   - Stop sentinel present      → exit 0
-  #   - Otherwise (task-ready:*, noise) → ignore, continue loop
+  #   - Matches epic-ready:TASK-N  → epicLoop "$TASK_ID"
+  #   - Matches meta-ready:TASK-N  → metaLoop "$TASK_ID"  (legacy meta lane)
+  #   - Stop sentinel present       → exit 0
+  #   - Otherwise (basic-ready:*, noise) → ignore, continue loop
 }
 ```
 
 ### catchUpScan
 
-On startup, processes any meta-tasks already in the backlog before the Monitor
-starts. Prevents tasks created before this session from being missed.
+On startup, processes any epic-tasks and meta-tasks already in the backlog before
+the Monitor starts. Prevents tasks created before this session from being missed.
 
 ```bash
 catchUpScan() {
@@ -428,6 +610,17 @@ catchUpScan() {
   STOP_FILE="${BACKLOG_DIR}/.loop-stop"
   META_STOP_FILE="${BACKLOG_DIR}/.loop-meta-stop"
 
+  # B″ epic channel: scan active Epic:* statuses (mirrors epic-daemon.js EPIC_READY_STATUSES)
+  for STATUS in "Epic: Proposal" "Epic: Plan" "Epic: Decomposing" "Epic: Awaiting Children" "Epic: Evaluating"; do
+    backlog task list --status "$STATUS" --plain \
+      | grep -oP 'TASK-\d+' \
+      | while read -r TID; do
+          [ -f "$STOP_FILE" ] || [ -f "$META_STOP_FILE" ] && return 0
+          epicLoop "$TID"
+        done
+  done
+
+  # Legacy meta lane
   for STATUS in "Meta-Proposal" "Meta-Plan" "Meta-Active"; do
     backlog task list --status "$STATUS" --plain \
       | grep -oP 'TASK-\d+' \
@@ -734,47 +927,16 @@ gateHuman() {
 
 ### reviewLoop
 
-`reviewLoop` drives the iterative human-feedback gate for `Meta-Proposal` intake:
+Canonical definition: **see spec-stdlib § reviewLoop** (`docs/spec-stdlib.md`).
 
-- **Iteration counting**: reads `grep -c "reviewLoop:"` from task notes. Each call
-  appends one `reviewLoop:` note line, so the count monotonically increases.
-- **Cap**: MAX_ITER = 4 (matches `task-to-backlog` and `feature-to-backlog`). On
-  exhaustion, status is set to `Needs Human` and the loop exits permanently.
-- **Human approval path**: the human sets `status → Meta-Plan`. The daemon emits
-  `meta-ready`, `metaLoop` dispatches to `draftDecomposition` (not `draftMetaProposal`),
-  and the intake reviewLoop is never re-entered. This is the intended approval path.
-- **Revision path**: the human adds a feedback note but leaves status at `Meta-Proposal`.
-  The daemon re-emits `meta-ready`, `metaLoop` calls `draftMetaProposal` again
-  (which calls `reviewLoop`), the ITER count has already incremented, so the next
-  iteration message is shown automatically.
+Used by both the epic lane (`epicReviewProposal`, `epicReviewPlan`) and the legacy
+meta lane (`draftMetaProposal`). The implementation follows the spec-stdlib contract:
 
-```bash
-reviewLoop() {
-  local META_ID="$1"
-  local DOC="$2"
-  local MAX_ITER="$3"
-
-  # Iteration counting: each reviewLoop call appends one "reviewLoop:" note line
-  ITER=$(backlog task view "$META_ID" --plain | grep -c "reviewLoop:" || true)
-
-  if [ "$ITER" -ge "$MAX_ITER" ]; then
-    backlog task edit "$META_ID" \
-      --status "Needs Human" \
-      --append-notes "Escalated: reviewLoop exhausted — ${MAX_ITER} iterations without human approval"
-    return 1
-  fi
-
-  ITER_NEXT=$((ITER + 1))
-
-  # Soft halt via gateHuman — re-enters on next meta-ready event
-  gateHuman "$META_ID" \
-    "reviewLoop: iteration ${ITER_NEXT}/${MAX_ITER} — review proposal and set status → Meta-Plan to approve (approval path), or add feedback note and leave status unchanged for revision."
-
-  # Note written before gateHuman exits the process
-  backlog task edit "$META_ID" --append-notes \
-    "reviewLoop: iteration ${ITER_NEXT} of ${MAX_ITER}"
-}
-```
+- Iteration counting via `reviewLoop:` note lines (monotonically incremented each call).
+- MAX_ITER = 4; on exhaustion escalates to `Needs Human` / `Epic: Needs Human`.
+- Epic lane: human approval = advancing status to the next Epic:* column.
+- Meta lane: human approval = setting status → Meta-Plan.
+- Soft halt via `gateHuman`; daemon re-emits `epic-ready:` / `meta-ready:` on next poll.
 
 ### setReady (auto-schedule)
 

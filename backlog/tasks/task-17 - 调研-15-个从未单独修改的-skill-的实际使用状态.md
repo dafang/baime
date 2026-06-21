@@ -1,7 +1,7 @@
 ---
 id: TASK-17
 title: 调研 15 个从未单独修改的 skill 的实际使用状态
-status: Basic: Proposal
+status: "Basic: Proposal"
 assignee: []
 created_date: '2026-06-17 16:04'
 updated_date: '2026-06-18 02:27'

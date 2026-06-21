@@ -1,7 +1,7 @@
 ---
 id: TASK-33
 title: 为 validate-plugin.sh 增加大体积 skill 的 contracts 密度软警告
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 12:53'
 updated_date: '2026-06-18 12:58'

@@ -1,7 +1,7 @@
 ---
 id: TASK-48
 title: Class D Step 1：为每个 fixture 补充 prompt_template 字段
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 15:12'
 updated_date: '2026-06-19 16:07'

@@ -1,7 +1,7 @@
 ---
 id: TASK-44
 title: Exp-F：验证 reference/ 在 skill 激活路径中是否可靠加载
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 12:51'
 updated_date: '2026-06-19 13:57'

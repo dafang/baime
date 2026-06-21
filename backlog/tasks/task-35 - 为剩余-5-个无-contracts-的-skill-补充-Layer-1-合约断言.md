@@ -1,7 +1,7 @@
 ---
 id: TASK-35
 title: 为剩余 5 个无 contracts 的 skill 补充 Layer 1 合约断言
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 12:54'
 updated_date: '2026-06-18 13:02'

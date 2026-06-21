@@ -1,7 +1,7 @@
 ---
 id: TASK-27
 title: 强化 loop-backlog executePrompt 注入执行协议
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-18 06:21'
 updated_date: '2026-06-18 06:50'

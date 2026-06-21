@@ -1,7 +1,7 @@
 ---
 id: TASK-43
 title: '为方法论主张增加 evidence/[unvalidated] meta-lint'
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 12:26'
 updated_date: '2026-06-19 12:45'

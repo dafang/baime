@@ -1,7 +1,7 @@
 ---
 id: TASK-53
 title: Fixture 质量 lint + harness 字段注入自检 + 负控制
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 15:58'
 updated_date: '2026-06-19 23:12'

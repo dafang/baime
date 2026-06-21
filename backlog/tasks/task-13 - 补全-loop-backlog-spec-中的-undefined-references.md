@@ -1,7 +1,7 @@
 ---
 id: TASK-13
 title: 补全 loop-backlog spec 中的 undefined references
-status: Basic: Backlog
+status: "Basic: Backlog"
 assignee: []
 created_date: '2026-06-17 16:03'
 updated_date: '2026-06-17 16:47'

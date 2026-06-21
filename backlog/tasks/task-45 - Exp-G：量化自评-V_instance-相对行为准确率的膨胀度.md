@@ -1,7 +1,7 @@
 ---
 id: TASK-45
 title: Exp-G：量化自评 V_instance 相对行为准确率的膨胀度
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 12:51'
 updated_date: '2026-06-19 14:57'

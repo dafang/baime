@@ -1,7 +1,7 @@
 ---
 id: TASK-14
 title: 提取跨 skill 重复的 reviewLoop 和 detectLang 为共享规格
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-17 16:04'
 updated_date: '2026-06-18 10:58'

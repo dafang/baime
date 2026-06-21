@@ -1,7 +1,7 @@
 ---
 id: TASK-46
 title: Exp-H：验证 Layer 2.5 Oracle 阈值的跨 skill 泛化能力
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-19 12:51'
 updated_date: '2026-06-19 15:50'

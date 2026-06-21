@@ -1,7 +1,7 @@
 ---
 id: TASK-118
 title: Implement B″ unified-board dual-state-machine architecture
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-21'
 updated_date: '2026-06-21'

@@ -1,7 +1,7 @@
 ---
 id: TASK-2
 title: 用 meta-cc 检查最近变更，审查并更新项目文档
-status: Basic: Done
+status: "Basic: Done"
 assignee: []
 created_date: '2026-06-16 15:41'
 updated_date: '2026-06-16 15:50'
