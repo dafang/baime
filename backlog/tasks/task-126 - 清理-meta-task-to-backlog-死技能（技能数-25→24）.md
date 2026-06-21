@@ -1,10 +1,10 @@
 ---
 id: TASK-126
 title: 清理 meta-task-to-backlog 死技能并更新 backlog-setup B″ 列配置
-status: 'Basic: Backlog'
+status: 'Basic: Done'
 assignee: []
 created_date: '2026-06-21 11:21'
-updated_date: '2026-06-21 11:36'
+updated_date: '2026-06-21 11:55'
 labels:
   - 'kind:basic'
 dependencies: []
@@ -244,6 +244,10 @@ Proposal review iteration 1: APPROVED
 Proposal approved. Starting plan draft.
 
 Plan review iteration 1: APPROVED
+
+claimed: 2026-06-21T11:46:44Z
+
+Completed: 2026-06-21T11:55:11Z — merged task/TASK-126; workerLoop independent DoD 12/12 PASS
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
