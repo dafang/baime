@@ -445,62 +445,59 @@ The daemon detects the marker + human status advance and fires `plan-approved:TA
 
 ### Phase 5: finalise
 
-Spawn Task agent (pass `CFG_DOC_PATH`, `TASK_ID`, `SLUG` as literal values):
+Run the following bash commands directly (no agent spawn needed — all steps are mechanical):
 
-> Finalise the backlog task: write combined proposal + plan into task and add DoD items.
->
-> Task ID: `<TASK_ID>` — Slug: `<SLUG>` — Doc root: `<CFG_DOC_PATH>`
->
-> **Step B — Write combined proposal+plan into task and add DoD**:
-> ```bash
-> grep -oP '(?<=- \[ \] `)[^`]+(?=`)' $TMPDIR/ftb-plan.md \
->   > $TMPDIR/ftb-dod-cmds.txt
->
-> DOD_ARGS=()
-> while IFS= read -r cmd; do
->   DOD_ARGS+=("--dod" "$cmd")
-> done < $TMPDIR/ftb-dod-cmds.txt
->
-> {
->   cat $TMPDIR/ftb-proposal.md
->   printf '\n\n---\n\n'
->   cat $TMPDIR/ftb-plan.md
-> } > $TMPDIR/ftb-combined.md
->
-> backlog task edit <TASK_ID> \
->   --planSet "$(cat $TMPDIR/ftb-combined.md)" \
->   --status "Basic: Backlog" \
->   "${DOD_ARGS[@]}"
-> ```
->
-> **Step D — Run Layer 0-2 validation gate**:
-> ```bash
-> bash scripts/validate-plugin.sh
-> ```
-> If validation fails, fix the SKILL.md contracts or internals before proceeding.
->
-> Add the following DoD items to the task:
-> ```bash
-> backlog task edit <TASK_ID> \
->   --dod "bash scripts/validate-plugin.sh" \
->   --dod "grep -q 'contracts:' plugin/skills/<skill-slug>/SKILL.md"
-> ```
->
-> **Step E — Print completion**:
-> ```
-> ✅ Task <TASK_ID> is now in Backlog.
->
-> 两轮起草 + 两轮迭代审查已完成。
->
-> 请在 web UI 审阅 Definition of Done 中的命令：
->   backlog browser --no-open --port 6421
->
-> 确认无误后，将任务移入执行队列：
->   backlog task edit <TASK_ID> --status "Basic: Ready"
->
-> 启动 L0 执行：
->   /loop-backlog
-> ```
+**Step B — Write combined proposal+plan into task and add DoD**:
+```bash
+grep -oP '(?<=- \[ \] `)[^`]+(?=`)' $TMPDIR/ftb-plan.md \
+  > $TMPDIR/ftb-dod-cmds.txt
+
+DOD_ARGS=()
+while IFS= read -r cmd; do
+  DOD_ARGS+=("--dod" "$cmd")
+done < $TMPDIR/ftb-dod-cmds.txt
+
+{
+  cat $TMPDIR/ftb-proposal.md
+  printf '\n\n---\n\n'
+  cat $TMPDIR/ftb-plan.md
+} > $TMPDIR/ftb-combined.md
+
+backlog task edit <TASK_ID> \
+  --planSet "$(cat $TMPDIR/ftb-combined.md)" \
+  --status "Basic: Backlog" \
+  "${DOD_ARGS[@]}"
+```
+
+**Step D — Run Layer 0-2 validation gate**:
+```bash
+bash scripts/validate-plugin.sh
+```
+If validation fails, fix the SKILL.md contracts or internals before proceeding.
+
+Add the following DoD items to the task:
+```bash
+backlog task edit <TASK_ID> \
+  --dod "bash scripts/validate-plugin.sh" \
+  --dod "grep -q 'contracts:' plugin/skills/<skill-slug>/SKILL.md"
+```
+
+**Step E — Print completion**:
+```
+✅ Task <TASK_ID> is now in Backlog.
+
+两轮起草 + 两轮迭代审查已完成。
+
+请在 web UI 审阅 Definition of Done 中的命令：
+  backlog browser --no-open --port 6421
+
+确认无误后，将任务移入执行队列：
+  backlog task edit <TASK_ID> --status "Basic: Ready"
+
+启动 L0 执行：
+  /loop-backlog
+```
+(print the standard completion message as text output)
 
 ---
 
