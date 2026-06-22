@@ -139,7 +139,7 @@ git status --short
 | `query_file_snapshots` | 关键文件（如 SKILL.md）如何演变 | 追踪规则类隐性项的外化进度 |
 | `get_timeline` | 近期工作的时间骨架 | session 定向，降低 H |
 
-**GCL 视角下的新用途**：meta-cc session trace 是目前唯一可以提供**实测 H 分量**的数据源（区别于本研究使用的负空间估算）。具体路径见§下一步。
+**GCL 视角下的用途（更新）**：H 分量的主要实测路径已由 TASK-151 建立——reviewer 在 gate 时刻将 premise-ledger 写入 task Notes，可从 Notes 机械提取，不需要 meta-cc。meta-cc 在 GCL 测量中的角色调整为：（1）追踪**人类 gate 行为**（`query_user_messages`：人类输入走主 session，是 meta-cc 独有的数据源）；（2）**交叉校验**——对比 Notes 中的 premise-ledger 与主 session trace，识别 reviewer 未自报但人类实际援引的隐性前提。
 
 **待确认**：meta-cc 的查询在 loop-backlog agent 上下文中是否可用（工具权限）；加入 evaluate 阶段是否会显著增加执行时间。
 
