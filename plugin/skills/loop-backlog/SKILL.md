@@ -1020,8 +1020,9 @@ append a structured note to the worktree summary file:
 **Execution Summary**: Before writing the signal file, write a final summary section:
   printf '## Execution Summary\nResult: Done|Needs Human\nCommit: <hash or no changes>\n<ordered list of Phase and DoD outcomes>\n' >> ${TWT}/.agent-summary-${TID}
 
-Do NOT run `backlog task edit` for any --append-notes, --status, or other task edits.
-The worker (main branch) handles all task-file writes after reading this summary file.
+Do NOT run `backlog task edit` with --status, --planSet, --dod, --set-field, or --check-dod.
+You MAY run `backlog task edit <TASK_ID> --append-notes "..."` to record Phase checkpoints and DoD results.
+The worker (main branch) handles all status transitions and field writes.
 
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 PROMPT_EOF
@@ -1186,6 +1187,8 @@ $(echo -e "$EXECUTION_LOG")"
   if [ -f "$AGENT_SUMMARY_FILE" ]; then
     AGENT_SUMMARY_CONTENT=$(cat "$AGENT_SUMMARY_FILE")
     backlog task edit "$TASK_ID" --append-notes "$AGENT_SUMMARY_CONTENT"
+  else
+    backlog task edit "$TASK_ID" --append-notes "WARNING: agent-summary missing for ${TASK_ID} — execution trace unavailable"
   fi
   backlog task edit "$TASK_ID" \
     --status "Basic: Done" \
@@ -1320,12 +1323,11 @@ for TASK_ID in $CLAIMED_TASK_IDS; do
         backlog task edit "$TASK_ID" --append-notes "workerLoop pre-merge DoD #${DOD_N} FAIL: ${DOD_CMD}"
         break
       fi
+      backlog task edit "$TASK_ID" --append-notes "workerLoop DoD #${DOD_N}: PASS — ${DOD_CMD}"
       DOD_N=$((DOD_N + 1))
     done < <(backlog task view "$TASK_ID" --plain | grep -oP '^- \[.\] #\d+ .+')
 
-    if [ "$PRE_MERGE_DOD_PASS" = "true" ]; then
-      backlog task edit "$TASK_ID" --append-notes "workerLoop DoD verified: all ${DOD_N} commands passed"
-    else
+    if [ "$PRE_MERGE_DOD_PASS" != "true" ]; then
       SIGNAL_CONTENT="needs-human: ${PRE_MERGE_FAIL_MSG}"
     fi
   fi
@@ -1347,6 +1349,8 @@ for TASK_ID in $CLAIMED_TASK_IDS; do
       if [ -f "$AGENT_SUMMARY_FILE" ]; then
         AGENT_SUMMARY_CONTENT=$(cat "$AGENT_SUMMARY_FILE")
         backlog task edit "$TASK_ID" --append-notes "$AGENT_SUMMARY_CONTENT"
+      else
+        backlog task edit "$TASK_ID" --append-notes "WARNING: agent-summary missing for ${TASK_ID} — execution trace unavailable"
       fi
       backlog task edit "$TASK_ID" \
         --status "Basic: Done" \
@@ -1395,7 +1399,7 @@ Key properties:
 - Only runs when the agent signalled `"done"` and the worktree directory still exists.
 - On failure, overwrites `SIGNAL_CONTENT` with `"needs-human: workerLoop DoD #N failed: …"`,
   causing the standard escalation branch below to fire.
-- On success, appends `"workerLoop DoD verified: all N commands passed"` to the task notes.
+- On success, appends a per-command `"workerLoop DoD #N: PASS — <cmd>"` note for each passing command.
 
 ### Failure path (Stuck)
 
