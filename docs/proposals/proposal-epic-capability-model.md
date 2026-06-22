@@ -59,6 +59,32 @@ Capability :: {
 
 `replan` 不是独立能力，而是 `evaluate=NotMet` 的**反馈边**：根因分类 + 修改 plan facet → 重触发 `decompose` 处理器。
 
+### cap:experiment — Experiment Outcome Facet
+
+`cap:experiment` is an additional capability marker for `kind:basic` experiment tasks. It records the epistemic outcome of a quantitative experiment run as a machine-readable, grep-able marker in the task notes. It is **not** a process-lifecycle facet (unlike `cap:propose` / `cap:plan` / `cap:execute`); it is experiment-domain-specific and only relevant to tasks that run a hypothesis-driven experiment.
+
+**Allowed values** (closed enum — validated by `scripts/verify-cap-markers.sh`):
+
+| Value | Meaning |
+|-------|---------|
+| `CONFIRMED` | Hypothesis supported: the measured data is consistent with the predicted direction and magnitude |
+| `NULL` | No detectable effect: the experiment ran with adequate power but found no signal |
+| `REJECTED` | Hypothesis contradicted: the measured data is inconsistent with the prediction |
+| `UNDERPOWERED` | Insufficient data or k: the experiment did not run enough trials to reach a conclusion |
+
+**Who sets it**: The experiment runner — either `experiments/skill-quality/lib/runner.ts` (TASK-141-B) writing the marker automatically after producing the results JSON, or a human experimenter setting it manually after reviewing results.
+
+**When**: After the experiment artifact JSON is written and the results have been reviewed. The marker is the terminal signal that the experiment task is complete; it should not be written speculatively.
+
+**Example**:
+```
+cap:experiment=CONFIRMED
+```
+
+**Sync note**: If the allowed-value set changes (e.g., adding `PARTIAL`), update **both** `scripts/verify-cap-markers.sh` (the `EXPERIMENT_VALUES` set in the Python snippet) **and** this document together. The two are the canonical source of truth for the enum.
+
+---
+
 ### 能力 DAG
 
 ```
