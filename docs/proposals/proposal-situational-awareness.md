@@ -1,9 +1,57 @@
 # 提案：开发过程情境感知（Situational Awareness）
 
-**状态**：草稿（待影响确认与路径优化）
-**背景**：2026-06-22 会话讨论
+**状态**：修订版 v2（基于 GCL 实证研究，2026-06-22）
+**背景**：2026-06-22 会话讨论；v2 使命依据 TASK-150 实证结果更新
 
-> **使命更新（TASK-150 GCL 研究，2026-06-22）**：本提案原使命为"帮人重建对系统的理解"。根据 docs/research/gcl-synthesis.md 的 H2/H4 验证结果，使命修正为：**最小化人为了可靠 gate 所必须理解的表面积**。具体地：(1) Scope− 是压缩 gate 认知负载（GCL）的主要杠杆；(2) 规则类隐性项可通过 artifact 外化辅助消除（Artifact+）；(3) 全局可理解性目标不切实际，工具建设应聚焦于降低 gate 判断所需的最小理解量。H4 verdict: H4 null——§7.3 方向无需整体回退，但 Artifact+ 对可文档化规则类隐性项有效，可作为辅助手段。见 docs/research/gcl-intervention.md。
+---
+
+## 使命
+
+> **最小化人为了可靠 gate 所必须理解的表面积。**
+
+本提案 v1 的原使命为"帮人重建对系统的理解"。根据 TASK-150 GCL 实证研究（见下文§研究基础），全局理解不是可达目标，工具建设的正确锚点是**最小化 gate 判断所需的认知单元数量**，不是恢复理解。
+
+---
+
+## 研究基础（TASK-150，2026-06-22）
+
+以下数据来自 [docs/research/gcl-synthesis.md](gcl-synthesis.md)，完整分析见各引用文件。
+
+### GCL 基线（N=20 gate 事件）
+
+Gate 理解负载（GCL = 显性项 E + 跨界项 C + 隐性项 H）的操作化定义见 [docs/research/gcl-definition.md](gcl-definition.md)。
+
+| 分量 | 均值 | 占比 | 可压缩路径 |
+|------|------|------|-----------|
+| E（显性项：DoD 条目 + Plan Phase 数）| 8.35 | 57% | 收窄 gate 判断范围（Scope−）|
+| C（跨界项：跨任务 / 跨文档引用）| 4.50 | 31% | 降低 task 耦合（H2）|
+| H（隐性项：无 artifact 支撑的前提）| 1.70 | 12% | Scope− 稳定有效；Artifact+ 对规则类有效 |
+| **GCL 总量** | **14.55** | — | — |
+
+关键对照：dod-eval gate（纯机械 DoD 验证）均值 GCL = **5.0**，为全局均值的 **34%**。这是 Scope− 干预效果的实测值。数据来源：[docs/research/gcl-baseline.md](gcl-baseline.md)（N=20）。
+
+### H2：任务耦合度与跨界 GCL 正相关（confirmed）
+
+Spearman ρ = 0.87，p = 0.001，N = 9 任务（[docs/research/gcl-drivers.md](gcl-drivers.md)）。耦合代理 = 跨任务引用数 + git 变更文件数，均从 artifact 机械提取。
+
+工程推论：降低 task 耦合（更自包含的 task 设计、child task 内联父任务 acceptance gate）是压缩 C 分量的主要杠杆。
+
+### H4：隐性项压缩路径（null，细化）
+
+反事实分析（N=3 高 H 事件）显示（[docs/research/gcl-intervention.md](gcl-intervention.md)）：
+
+| 隐性项类型 | Artifact+ 效果 | Scope− 效果 |
+|-----------|--------------|------------|
+| 规则类（可文档化的规则、判断标准、历史决策记录）| ✅ 可消除（~100%）| ✅ 可消除 |
+| 判断类 / 结构类（整体评估框架、演化中的系统策略）| ⚠️ 有限（33%–67%，H 转为 C，非净减）| ✅ 稳定（~100%）|
+
+严格 H4 confirmed 条件（Artifact+ ≤10%）未满足，裁定为 **H4 null**。§7.3 压缩表面积方向无需整体回退。
+
+**关键推论**：
+1. **主要杠杆（Scope−）**：收窄 gate 判断范围对所有隐性项类型均有效，且不受系统演化影响（新涌现的隐性项天然不进入收窄后的 gate 范围）。
+2. **辅助工具（Artifact+）**：针对规则类隐性项，先外化到 `docs/ARCHITECTURE.md`（系统不变量、判断准则、架构决策记录）再收窄范围，是可行的双阶段路径。
+
+*注：H 分量基于负空间估算法（中低置信度），H4 反事实预测标注为 [directional-prediction, needs validation]。后续验证路径见§下一步。*
 
 ---
 
@@ -83,13 +131,15 @@ git status --short
 
 具体查询点：
 
-| 工具 | 用途 |
-|------|------|
-| `query_summaries` | 最近几次 session 做了什么 |
-| `query_user_messages` | 人类做了哪些 gate 决策 |
-| `get_work_patterns` | 哪些文件/技能被高频使用 |
-| `query_file_snapshots` | 关键文件（如 SKILL.md）如何演变 |
-| `get_timeline` | 近期工作的时间骨架 |
+| 工具 | 用途 | GCL 效用 |
+|------|------|---------|
+| `query_user_messages` | 人类做了哪些 gate 决策（APPROVED / ITERATE / 手动修正）| 直接测量 gate 行为，可用于 H4 验证 |
+| `query_summaries` | 最近几次 session 做了什么 | 还原决策上下文，降低 H 分量 |
+| `get_work_patterns` | 哪些文件/技能被高频使用 | 识别高 C 分量的耦合热点 |
+| `query_file_snapshots` | 关键文件（如 SKILL.md）如何演变 | 追踪规则类隐性项的外化进度 |
+| `get_timeline` | 近期工作的时间骨架 | session 定向，降低 H |
+
+**GCL 视角下的新用途**：meta-cc session trace 是目前唯一可以提供**实测 H 分量**的数据源（区别于本研究使用的负空间估算）。具体路径见§下一步。
 
 **待确认**：meta-cc 的查询在 loop-backlog agent 上下文中是否可用（工具权限）；加入 evaluate 阶段是否会显著增加执行时间。
 
@@ -148,6 +198,12 @@ backlog-setup     — one-time initializer; validates columns
 
 ## 下一步
 
-1. **影响量化**：在后续几次 loop-backlog 执行中，记录每次 session 开始的定向时间，以及因上下文丢失导致的返工事件，作为 ROI 基线。
-2. **路径优化讨论**：上述方案不一定都要实施。根据实际影响数据，确定哪些投入最有价值，以及各方案的具体实施顺序和范围。
-3. **P0 快速验证**：`scripts/orient.sh` 成本最低，可先实施并使用几次，验证是否真正缩短了 session 开始时的定向时间。
+1. **P0 快速验证**：`scripts/orient.sh` 成本最低，可先实施并使用几次，验证是否真正缩短了 session 开始时的定向时间。
+
+2. **规则类隐性项外化**（Artifact+ 路径）：建立 `docs/ARCHITECTURE.md`，记录系统不变量（daemon 单进程、BasicDAG 状态机）、R1 guard 豁免规则、FINISH/ITERATE 判断准则。首批条目可从 gcl-corpus.md 的 H 列直接提取（TASK-125 H-A、TASK-147 H-B）。
+
+3. **H4 动态验证（meta-cc session trace 路径）**：当前 H4 数据全部来自截面分析和反事实预测。使用 meta-cc 对实际 gate 事件做纵向追踪，可将 H 分量从估算升至实测。详见§研究基础中的验证路径讨论。
+
+4. **Scope− 对照实验**：对比"全 proposal 评审"（当前）与"仅 DoD 机械验证"（Scope−）的 gate 可靠性差异，实证验证 GCL 5.0 vs 14.55 是否在保持可靠性的同时不增加漏检率。
+
+5. **影响量化**：在后续几次 loop-backlog 执行中，记录每次 session 开始的定向时间，以及因上下文丢失导致的返工事件，作为 ROI 基线。
