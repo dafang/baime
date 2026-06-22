@@ -6,7 +6,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GUARD="$SCRIPT_DIR/verify-experiment-provenance.sh"
+SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
+GUARD="$SCRIPTS_DIR/verify-experiment-provenance.sh"
 
 PASS=0
 FAIL=0
@@ -121,7 +122,7 @@ rm -rf "$TMPROOT"
 # ── Phase C Tests ─────────────────────────────────────────────────────────────
 
 # Test 7: validate-plugin.sh references verify-experiment-provenance
-VALIDATE_SH="$SCRIPT_DIR/validate-plugin.sh"
+VALIDATE_SH="$SCRIPTS_DIR/validate-plugin.sh"
 grep -q 'verify-experiment-provenance' "$VALIDATE_SH" >/dev/null 2>&1
 check "validate-plugin.sh references verify-experiment-provenance" 0 $?
 
