@@ -68,18 +68,18 @@ reset :: (Task, Status) → ()  -- spec gap: no implementation body defined
 removeWorktree :: Task → ()  -- spec gap: no implementation body defined
 checkDod :: (Task, Int) → ()  -- spec gap: no implementation body defined
 
-Config :: {
+WorktreeConfig :: {
   symlinks    : [Path]   -- dirs to symlink into worktree ([] = none)
   maxParallel : Int      -- max concurrent background agents (default 2)
 }
 
-loadConfig :: () → Config  -- see spec-stdlib § loadConfig
+loadConfig :: () → WorktreeConfig  -- see spec-stdlib § loadConfig
 loadConfig() =
   | fromClaudeMd()   -- explicit: "## L0 Config" section in CLAUDE.md
                      -- reads: worktree-symlinks, max-parallel (default 2)
   | autoDetect()     -- implicit: probe package.json, go.mod, Cargo.toml, etc.
 
-autoDetect :: () → Config
+autoDetect :: () → WorktreeConfig
 autoDetect() = -- see spec-stdlib § loadConfig
 
 detectLang :: () → Lang  -- see spec-stdlib § detectLang
@@ -315,7 +315,7 @@ waitForAgents(tasks) = {
   return: results
 }
 
-withWorktree :: Task → Config → (Task → a) → a
+withWorktree :: Task → WorktreeConfig → (Task → a) → a
 withWorktree(T, cfg, f) = {
   wt:  createWorktree(T),
   _:   ∀s ∈ cfg.symlinks: symlink(repoRoot + "/" + s, wt + "/" + s),

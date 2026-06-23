@@ -18,18 +18,18 @@ contracts:
 
 ## Spec
 
-Config :: {
+BuildConfig :: {
   testCmd  : String,   -- per-phase test runner; becomes DoD[0] in generated plans
   testAll  : String,   -- full suite; becomes Acceptance Gate[0]
   docPath  : String    -- root for proposals/ and plans/ subdirectories
 }
 
-loadConfig :: () → Config  -- see spec-stdlib § loadConfig
+loadConfig :: () → BuildConfig  -- see spec-stdlib § loadConfig
 loadConfig() =
   | fromClaudeMd()   -- explicit: "## L0 Config" section in CLAUDE.md
   | autoDetect()     -- implicit: probe package.json, go.mod, Cargo.toml, etc.
 
-autoDetect :: () → Config
+autoDetect :: () → BuildConfig
 autoDetect() = -- see spec-stdlib § loadConfig
 
 detectLang :: () → Lang  -- see spec-stdlib § detectLang
@@ -96,7 +96,7 @@ featureToBacklog(T) = {
 
 -- Plan review invariants (all must hold for APPROVED)
 
-reviewPlan :: (Plan, Config) → Verdict
+reviewPlan :: (Plan, BuildConfig) → Verdict
 reviewPlan(P, cfg) = {
   ∀phase ∈ P.phases: {
     assert: ¬empty(phase.tests),                  -- TDD: Tests section must exist
