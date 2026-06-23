@@ -1,17 +1,17 @@
 ---
 id: TASK-13
 title: 补全 loop-backlog spec 中的 undefined references
-status: "Basic: Backlog"
+status: 'Basic: Done'
 assignee: []
 created_date: '2026-06-17 16:03'
-updated_date: '2026-06-17 16:47'
+updated_date: '2026-06-23 02:36'
 labels:
-  - kind:basic
+  - 'kind:basic'
   - spec-quality
   - loop-backlog
 dependencies: []
 priority: high
-ordinal: 4000
+ordinal: 1000
 ---
 
 ## Description
