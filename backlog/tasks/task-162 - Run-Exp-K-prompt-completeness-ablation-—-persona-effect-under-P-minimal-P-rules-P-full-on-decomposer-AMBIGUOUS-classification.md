@@ -3,14 +3,14 @@ id: TASK-162
 title: >-
   Run Exp-K: prompt completeness ablation — persona effect under P-minimal /
   P-rules / P-full on decomposer AMBIGUOUS classification
-status: 'Basic: In Progress'
+status: 'Basic: Backlog'
 assignee: []
 created_date: '2026-06-23 00:36'
-updated_date: '2026-06-23 09:13'
+updated_date: '2026-06-23 11:00'
 labels:
   - 'kind:basic'
 dependencies: []
-ordinal: 1000
+ordinal: 105000
 ---
 
 ## Description
@@ -114,6 +114,14 @@ prompts.ts created, TypeScript clean
 
 Phase 3 ✓ 2026-06-23T00:00:00Z
 run-exp-k.ts created, TypeScript clean
+
+Phase 4 ✓ 2026-06-23T10:58:56Z
+experiment completed, results written
+
+exp-k: H-K1 CONFIRMED — Δ(P-minimal)=+0.237 vs Δ(P-rules)=+0.025 on Haiku, Sonnet 0.000 vs −0.012; H-K2 NULL cross-model disagreement; H-K3 NULL partial (Haiku +0.237, Sonnet 0.000)
+
+Phase 5 ✓ 2026-06-23T11:00:47Z
+docs written, exp-k note added
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

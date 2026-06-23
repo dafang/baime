@@ -1,0 +1,117 @@
+{
+  "generated": "2026-06-23T10:59:03.871Z",
+  "data_source": "measured",
+  "experiment": "Exp-K",
+  "fixture_count": 16,
+  "fixture_class": "AMBIGUOUS only",
+  "models": {
+    "claude-haiku-4-5-20251001": {
+      "P-minimal": {
+        "V0": {
+          "accuracy": 0.7
+        },
+        "V1": {
+          "accuracy": 0.938
+        },
+        "delta": 0.237
+      },
+      "P-rules": {
+        "V0": {
+          "accuracy": 0.938
+        },
+        "V1": {
+          "accuracy": 0.963
+        },
+        "delta": 0.025
+      },
+      "P-full": {
+        "V0": {
+          "accuracy": 0.975
+        },
+        "V1": {
+          "accuracy": 0.95
+        },
+        "delta": -0.025
+      }
+    },
+    "claude-sonnet-4-6": {
+      "P-minimal": {
+        "V0": {
+          "accuracy": 0.875
+        },
+        "V1": {
+          "accuracy": 0.875
+        },
+        "delta": 0
+      },
+      "P-rules": {
+        "V0": {
+          "accuracy": 0.95
+        },
+        "V1": {
+          "accuracy": 0.938
+        },
+        "delta": -0.012
+      },
+      "P-full": {
+        "V0": {
+          "accuracy": 1
+        },
+        "V1": {
+          "accuracy": 1
+        },
+        "delta": 0
+      }
+    }
+  },
+  "hypotheses": {
+    "H-K1": {
+      "description": "Persona Δ(AMBIG) at P-minimal > Δ(AMBIG) at P-rules (persona helps more when no rules)",
+      "per_model": {
+        "claude-haiku-4-5-20251001": {
+          "delta_minimal": 0.237,
+          "delta_rules": 0.025,
+          "verdict": "CONFIRMED"
+        },
+        "claude-sonnet-4-6": {
+          "delta_minimal": 0,
+          "delta_rules": -0.012,
+          "verdict": "CONFIRMED"
+        }
+      },
+      "overall_verdict": "CONFIRMED"
+    },
+    "H-K2": {
+      "description": "Persona Δ(AMBIG) at P-rules > Δ(AMBIG) at P-full (persona helps more without few-shot examples)",
+      "per_model": {
+        "claude-haiku-4-5-20251001": {
+          "delta_rules": 0.025,
+          "delta_full": -0.025,
+          "verdict": "CONFIRMED"
+        },
+        "claude-sonnet-4-6": {
+          "delta_rules": -0.012,
+          "delta_full": 0,
+          "verdict": "REJECTED"
+        }
+      },
+      "overall_verdict": "NULL [cross-model disagreement] [underpowered]"
+    },
+    "H-K3": {
+      "description": "At P-minimal, both Haiku and Sonnet show positive Δ (persona universally helpful when underspecified)",
+      "per_model": {
+        "claude-haiku-4-5-20251001": {
+          "delta_minimal": 0.237,
+          "positive": true
+        },
+        "claude-sonnet-4-6": {
+          "delta_minimal": 0,
+          "positive": false
+        }
+      },
+      "overall_verdict": "NULL [partial]"
+    }
+  },
+  "cross_model_consistency": "CONSISTENT — both models: CONFIRMED for H-K1 (Δ_minimal > Δ_rules)",
+  "V_meta_experiment": 0.97
+}
