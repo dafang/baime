@@ -22,18 +22,18 @@ contracts:
 
 ## Spec
 
-Config :: {
+EpicConfig :: {
   testCmd  : String,   -- per-phase test runner; carried into child plans later
   testAll  : String,   -- full suite; carried into child plans later
   docPath  : String    -- root for proposals/ and plans/ subdirectories
 }
 
-loadConfig :: () → Config  -- see spec-stdlib § loadConfig
+loadConfig :: () → EpicConfig  -- see spec-stdlib § loadConfig
 loadConfig() =
   | fromClaudeMd()   -- explicit: "## L0 Config" section in CLAUDE.md
   | autoDetect()     -- implicit: probe package.json, go.mod, Cargo.toml, etc.
 
-autoDetect :: () → Config
+autoDetect :: () → EpicConfig
 autoDetect() = -- see spec-stdlib § loadConfig
 
 detectLang :: () → Lang  -- see spec-stdlib § detectLang

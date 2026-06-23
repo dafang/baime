@@ -18,16 +18,16 @@ contracts:
 
 ## Spec
 
-Config :: {
+DocConfig :: {
   docPath : String   -- root directory for plan docs and task outputs
 }
 
-loadConfig :: () → Config  -- see spec-stdlib § loadConfig
+loadConfig :: () → DocConfig  -- see spec-stdlib § loadConfig
 loadConfig() =
   | fromClaudeMd()   -- explicit: "## L0 Config" section in CLAUDE.md
   | autoDetect()     -- implicit: use "docs" if it exists, otherwise "."
 
-autoDetect :: () → Config
+autoDetect :: () → DocConfig
 autoDetect() = -- see spec-stdlib § loadConfig
 
 -- Non-development task types this skill handles (non-exhaustive)
