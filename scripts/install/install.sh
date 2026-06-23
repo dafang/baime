@@ -87,8 +87,13 @@ with open("$INSTALL_DIR/.claude-plugin/plugin.json", "w") as f:
 print("  plugin.json updated with", len(commands), "commands,", len(agents), "agents")
 PYEOF
 
-# 4. Set up marketplace source dir — source="." so marketplace.json and plugin are co-located
+# 4. Set up marketplace source dir — source="." so marketplace.json, plugin.json,
+#    commands, and agents are co-located. Claude resolves command paths from this
+#    directory when loading directory marketplaces.
+echo "Publishing plugin files to marketplace dir $MARKETPLACE_DIR..."
 mkdir -p "$MARKETPLACE_DIR/.claude-plugin"
+rsync -a --delete "$INSTALL_DIR/" "$MARKETPLACE_DIR/"
+
 cat > "$MARKETPLACE_DIR/.claude-plugin/marketplace.json" <<EOF
 {
   "name": "$MARKETPLACE_NAME",
@@ -96,10 +101,6 @@ cat > "$MARKETPLACE_DIR/.claude-plugin/marketplace.json" <<EOF
   "plugins": [{"name": "$PLUGIN_NAME", "source": "."}]
 }
 EOF
-
-# Copy plugin.json into marketplace dir so source="." resolves correctly
-mkdir -p "$MARKETPLACE_DIR/.claude-plugin"
-cp "$INSTALL_DIR/.claude-plugin/plugin.json" "$MARKETPLACE_DIR/.claude-plugin/plugin.json"
 
 # 5. Register extraKnownMarketplaces + enabledPlugins in ~/.claude/settings.json
 mkdir -p "$HOME/.claude"
@@ -116,21 +117,27 @@ jq --arg marketplace "$MARKETPLACE_NAME" \
    }' "$SETTINGS" > /tmp/baime-settings-tmp.json \
 && mv /tmp/baime-settings-tmp.json "$SETTINGS"
 
-# 6. Register in installed_plugins.json
-mkdir -p "$HOME/.claude/plugins"
-if [ ! -f "$INSTALLED_PLUGINS" ]; then
-    echo '{"version": 2, "plugins": {}}' > "$INSTALLED_PLUGINS"
+# 6. Register in installed_plugins.json. Prefer Claude's own installer so this
+#    stays compatible with its internal registry format.
+if command -v claude &>/dev/null; then
+    echo "Registering plugin with Claude Code..."
+    claude plugin install "$PLUGIN_KEY" >/dev/null
+else
+    mkdir -p "$HOME/.claude/plugins"
+    if [ ! -f "$INSTALLED_PLUGINS" ]; then
+        echo '{"version": 2, "plugins": {}}' > "$INSTALLED_PLUGINS"
+    fi
+
+    INSTALL_DATE="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+
+    jq --arg key "$PLUGIN_KEY" \
+       --arg installPath "$INSTALL_DIR" \
+       --arg version "$PLUGIN_VERSION" \
+       --arg date "$INSTALL_DATE" \
+       '.plugins[$key] = [{"scope": "user", "installPath": $installPath, "version": $version, "installedAt": $date, "lastUpdated": $date}]' \
+       "$INSTALLED_PLUGINS" > /tmp/baime-plugins-tmp.json \
+    && mv /tmp/baime-plugins-tmp.json "$INSTALLED_PLUGINS"
 fi
-
-INSTALL_DATE="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
-
-jq --arg key "$PLUGIN_KEY" \
-   --arg installPath "$INSTALL_DIR" \
-   --arg version "$PLUGIN_VERSION" \
-   --arg date "$INSTALL_DATE" \
-   '.plugins[$key] = [{"scope": "user", "installPath": $installPath, "version": $version, "installedAt": $date, "lastUpdated": $date, "gitCommitSha": null}]' \
-   "$INSTALLED_PLUGINS" > /tmp/baime-plugins-tmp.json \
-&& mv /tmp/baime-plugins-tmp.json "$INSTALLED_PLUGINS"
 
 echo ""
 echo "baime installed successfully."
