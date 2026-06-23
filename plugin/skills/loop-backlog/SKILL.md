@@ -1,7 +1,7 @@
 ---
 name: loop-backlog
 description: "Autonomous unified B″ Worker for the backlog.md board. Drives BOTH lanes from one Monitor session: basic-ready events execute kind:basic tasks in isolated git worktrees that merge back on success; epic-ready events auto-decompose a kind:epic task (Epic: Ready → Decomposing → children at Basic: Backlog → Awaiting Children); child-done events reconcile the parent epic and, when all children are Basic: Done, run evaluate and write a FINISH/ITERATE recommendation for human confirmation. Invoke /loop-backlog once; it runs until the backlog/.loop-stop sentinel is written."
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor, Agent
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Monitor, Agent, TaskList, TaskStop
 contracts:
   - grep: "Monitor(persistent=true"
     target: self
@@ -47,6 +47,8 @@ contracts:
     target: self
   - grep: "Epic: Awaiting Children"
     target: self
+  - grep: "stopStaleMon"
+    target: self
 ---
 
 λ() → workerLoop()
@@ -64,6 +66,7 @@ ensureDaemonScript :: () → ()  -- intentional primitive: implemented in Implem
 daemonBootstrap :: () → ()  -- intentional primitive: implemented in Implementation section
 inProgressTasks :: () → [Task]  -- spec gap: no implementation body defined
 stopSentinel :: () → Bool  -- spec gap: no implementation body defined
+stopStaleMon :: () → ()  -- stop any orphaned Monitor tasks from prior /clear iterations
 createWorktree :: Task → Path  -- spec gap: no implementation body defined
 readyTasks :: () → [Task]  -- spec gap: no implementation body defined
 followDescription :: (Description, Context) → ()  -- spec gap: no implementation body defined
@@ -106,6 +109,7 @@ workerLoop() = {
     -- No basic task to claim; block persistently and dispatch the next daemon event.
     -- The unified daemon (basic-daemon.js v8) emits FIVE channels; this one worker
     -- session handles all of them (no separate loop-meta session needed).
+    _:      stopStaleMon(),
     event: Monitor(persistent=true,
         command="tail -f -n 0 \"$DAEMON_LOG\"",
         description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, or plan-approved:TASK-N) has arrived from the backlog task board. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
@@ -591,6 +595,15 @@ if [ -f "${REPO_ROOT}/scripts/basic-daemon.js" ] || [ -f "${REPO_ROOT}/scripts/b
        "You may safely delete it."
 fi
 ```
+
+### stopStaleMon
+
+Before creating a new Monitor, stop any existing Monitor tasks from prior iterations
+(e.g., left over after a /clear). Use TaskList to find running tasks whose description
+starts with "loop-backlog daemon notification", then stop each with TaskStop.
+
+This prevents duplicate Monitor instances from watching the same daemon log concurrently.
+After TaskStop calls complete, proceed to the Monitor call immediately.
 
 ### daemonBootstrap
 
