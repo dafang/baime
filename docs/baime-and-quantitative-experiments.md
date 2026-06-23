@@ -212,3 +212,24 @@ Pre-registered calibration run establishing the runner.ts framework. Confirmed e
 **Verdict**: H-A2 **NULL** (Haiku Δ=+0.037 < 0.05). Cross-model consistency: **NULL [cross-model disagreement]** — models disagree on direction after n=16, perfectly symmetric (±0.037). Per pre-registered priority-order rules, this is a definitive NULL.
 
 **Implication**: Do not add the V1 expert persona to loop-backlog decomposer SKILL.md. Classification rules already sufficient; residual errors are idiosyncratic to specific fixtures and do not improve systematically with persona framing. Definitive negative evidence documented in `docs/experiments/exp-j-decomposer-persona.md`.
+
+### Exp-K — Prompt completeness ablation: persona effect under P-minimal / P-rules / P-full (TASK-162)
+
+**Purpose**: Test whether prompt completeness mediates the persona effect on AMBIGUOUS classification. Exp-J used P-rules (functional directive + rules); this ablation adds P-minimal (no rules) and P-full (rules + 3 few-shot examples) to determine whether persona framing is more effective when the prompt is less complete.
+
+**Method**: 6-variant fully-factorial design — (P-minimal, P-rules, P-full) × (V0, V1) — on n=16 AMBIGUOUS fixtures from Exp-J at k=5; Haiku primary + Sonnet cross-check; 960 LLM calls across 192 cells. Results: `artifacts/analysis/exp-k-results.json` (data_source: measured).
+
+**Results**:
+
+| Model | P-minimal V0 | P-minimal V1 | Δ_minimal | P-rules V0 | P-rules V1 | Δ_rules | P-full V0 | P-full V1 | Δ_full |
+|-------|-------------|-------------|----------|-----------|-----------|--------|----------|----------|-------|
+| Haiku | 0.700 | 0.938 | **+0.237** | 0.938 | 0.963 | +0.025 | 0.975 | 0.950 | −0.025 |
+| Sonnet | 0.875 | 0.875 | **0.000** | 0.950 | 0.938 | −0.012 | 1.000 | 1.000 | 0.000 |
+
+**Verdict**:
+- H-K1 (Δ_minimal > Δ_rules): **CONFIRMED** — both models agree (Haiku: 0.237 >> 0.025; Sonnet: 0.000 > −0.012)
+- H-K2 (Δ_rules > Δ_full): **NULL [cross-model disagreement]** — Haiku CONFIRMED, Sonnet REJECTED (Sonnet at ceiling 1.000 for P-full)
+- H-K3 (both positive at P-minimal): **NULL [partial]** — Haiku +0.237 (yes), Sonnet 0.000 (no)
+- Cross-model consistency for H-K1: CONSISTENT
+
+**Implication**: Persona framing acts as a rule-substitute, not a rule-augment. At P-minimal (no rules), the expert persona provides +23.7pp on Haiku by encoding implicit classification guidance. Once explicit rules are present (P-rules, P-full), persona provides no consistent additional benefit. This confirms and refines the Exp-I/J result: the current decomposer prompt (P-rules level) is already at the point where persona framing does not improve accuracy. Full results in `docs/experiments/exp-k-decomposer-persona.md`.
