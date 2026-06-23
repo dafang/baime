@@ -3,14 +3,14 @@ id: TASK-162
 title: >-
   Run Exp-K: prompt completeness ablation — persona effect under P-minimal /
   P-rules / P-full on decomposer AMBIGUOUS classification
-status: 'Basic: Backlog'
+status: 'Basic: In Progress'
 assignee: []
 created_date: '2026-06-23 00:36'
-updated_date: '2026-06-23 00:38'
+updated_date: '2026-06-23 09:13'
 labels:
   - 'kind:basic'
 dependencies: []
-ordinal: 105000
+ordinal: 1000
 ---
 
 ## Description
@@ -103,6 +103,17 @@ Create docs/experiments/exp-k-decomposer-persona.md with full design doc (resear
 Plan review iteration 1: APPROVED
 
 cap:propose=approved
+
+claimed: 2026-06-23T09:07:02Z
+
+Phase 1 ✓ 2026-06-23T00:00:00Z
+hypotheses.md created and committed
+
+Phase 2 ✓ 2026-06-23T00:00:00Z
+prompts.ts created, TypeScript clean
+
+Phase 3 ✓ 2026-06-23T00:00:00Z
+run-exp-k.ts created, TypeScript clean
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
