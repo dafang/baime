@@ -954,7 +954,8 @@ Monitor tails that file:
 
 ```bash
 # Foreground tail — Monitor reads its stdout as the event stream.
-Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
+# -n 0 prevents stale log replay on restart (starts from end of file).
+Monitor(persistent=true, command="tail -f -n 0 \"$DAEMON_LOG\"")
 ```
 
 Any output line matching `basic-ready:TASK-*` is the wake-up signal; re-enter `workerLoop()`.
@@ -1275,7 +1276,7 @@ The top-level orchestration using claimBatch, background Agent spawning, and ser
 
 if [ -z "$CLAIMED_TASK_IDS" ]; then
   # No basic task to claim — block on the daemon event stream (all three channels).
-  # Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")
+  # Monitor(persistent=true, command="tail -f -n 0 \"$DAEMON_LOG\"")
   # On basic-ready:TASK-N      → re-enter workerLoop (claim & execute).
   # On epic-ready:TASK-N       → epicDecompose(extractId), then re-enter workerLoop.
   # On child-done:TASK-N       → onChildDone(extractId), then re-enter workerLoop.
@@ -1649,9 +1650,10 @@ The `daemonBootstrap` section will restart the daemon automatically on the next
 `/loop-backlog` invocation. The PID file (`backlog/.basic-daemon.pid`) is managed
 by the daemon itself and removed on exit.
 
-Use `Monitor(persistent=true, command="tail -f \"$DAEMON_LOG\"")` to wait for basic-ready
-events. The daemon appends `basic-ready:TASK-N` lines to `backlog/.basic-daemon.log`; `tail -f`
-runs in the foreground so Monitor receives each line as an event immediately.
+Use `Monitor(persistent=true, command="tail -f -n 0 \"$DAEMON_LOG\"")` to wait for basic-ready
+events. The daemon appends `basic-ready:TASK-N` lines to `backlog/.basic-daemon.log`; `tail -f -n 0`
+runs in the foreground so Monitor receives each line as an event immediately (starting from the
+end of the file to prevent stale event replay on restart).
 The daemon subprocess exits only when `backlog/.loop-stop` is written (or the parent process dies).
 
 To stop the Monitor from outside the skill, call `TaskStop <monitor-task-id>`.
