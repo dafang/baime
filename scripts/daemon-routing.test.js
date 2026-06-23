@@ -185,8 +185,8 @@ try {
 
   // Test 9: unified daemon file carries daemon-version: v8 and wires all five channels
   {
-    const daemon = path.join(__dirname, 'basic-daemon.js');
-    assert(fs.existsSync(daemon), 'Test 9a: scripts/basic-daemon.js exists');
+    const daemon = path.join(__dirname, '..', 'plugin', 'scripts', 'basic-daemon.js');
+    assert(fs.existsSync(daemon), 'Test 9a: plugin/scripts/basic-daemon.js exists');
     if (fs.existsSync(daemon)) {
       const content = fs.readFileSync(daemon, 'utf8');
       assert(content.slice(0, 300).includes('daemon-version: v8'), 'Test 9b: basic-daemon.js has daemon-version: v8');

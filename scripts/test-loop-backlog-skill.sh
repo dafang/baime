@@ -20,22 +20,22 @@ else
   echo "PASS Test 2: basic-ready referenced"
 fi
 
-# Test 3: daemon-version tag must be present
-if ! grep -qE 'daemon-version.*v[0-9]+' "$SKILL"; then
-  echo "FAIL Test 3: no daemon-version tag in $SKILL"
+# Test 3: must reference resolveBaimeScripts (no longer embeds daemon inline)
+if ! grep -q 'resolveBaimeScripts' "$SKILL"; then
+  echo "FAIL Test 3: resolveBaimeScripts not referenced in $SKILL"
   FAIL=1
 else
-  echo "PASS Test 3: daemon-version tag present"
+  echo "PASS Test 3: resolveBaimeScripts referenced"
 fi
 
-# Test 4: embedded daemon version tag must match scripts/basic-daemon.js version
-SKILL_VER=$(grep -oP 'daemon-version:\s*v\K[0-9]+' "$SKILL" | head -1 || echo "")
-DAEMON_VER=$(grep -oP 'daemon-version:\s*v\K[0-9]+' scripts/basic-daemon.js | head -1 || echo "")
-if [ "$SKILL_VER" != "$DAEMON_VER" ]; then
-  echo "FAIL Test 4: version mismatch — SKILL has v${SKILL_VER}, basic-daemon.js has v${DAEMON_VER}"
+# Test 4: plugin/scripts/basic-daemon.js must exist and carry daemon-version tag
+DAEMON_FILE="plugin/scripts/basic-daemon.js"
+DAEMON_VER=$(grep -oP 'daemon-version:\s*v\K[0-9]+' "$DAEMON_FILE" | head -1 || echo "")
+if [ -z "$DAEMON_VER" ]; then
+  echo "FAIL Test 4: no daemon-version tag in $DAEMON_FILE"
   FAIL=1
 else
-  echo "PASS Test 4: daemon-version tags match (v${SKILL_VER})"
+  echo "PASS Test 4: plugin/scripts/basic-daemon.js daemon-version tag present (v${DAEMON_VER})"
 fi
 
 # Test 5: must reference basicDAG or basic worker state machine

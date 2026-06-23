@@ -182,7 +182,16 @@ echo ""
 echo "=== plugin/scripts/ Copy Consistency ==="
 
 PLUGIN_SCRIPTS_DIR="$REPO_ROOT/plugin/scripts"
-for script_name in basic-daemon.js verify-subtask-dod.sh skill-lint.sh validate-plugin.sh verify-experiment-provenance.sh; do
+# basic-daemon.js is canonical in plugin/scripts/ (no scripts/ copy); check it exists.
+if [ -L "${PLUGIN_SCRIPTS_DIR}/basic-daemon.js" ]; then
+    fail "plugin/scripts/basic-daemon.js is a symlink (must be real file)"
+elif [ ! -f "${PLUGIN_SCRIPTS_DIR}/basic-daemon.js" ]; then
+    fail "missing plugin/scripts/basic-daemon.js"
+else
+    pass "plugin/scripts copy: basic-daemon.js"
+fi
+
+for script_name in verify-subtask-dod.sh skill-lint.sh validate-plugin.sh verify-experiment-provenance.sh; do
     canonical="${REPO_ROOT}/scripts/${script_name}"
     copy="${PLUGIN_SCRIPTS_DIR}/${script_name}"
     if [ -L "$copy" ]; then

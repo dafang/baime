@@ -19,7 +19,7 @@ CHECK_MODE=0
 # Unified B″ poller (basic-daemon.js) emits all three channels (basic-ready / epic-ready /
 # child-done); the former separate epic-daemon was removed in the unified-worker refactor.
 DAEMONS=(
-  "unified|${BACKLOG_DIR}/.basic-daemon.pid|${BACKLOG_DIR}/.basic-daemon.log|node scripts/basic-daemon.js"
+  "unified|${BACKLOG_DIR}/.basic-daemon.pid|${BACKLOG_DIR}/.basic-daemon.log|node \${XDG_DATA_HOME:-\${HOME}/.local/share}/baime/scripts/basic-daemon.js"
 )
 
 STALE_FOUND=0
