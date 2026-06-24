@@ -3,6 +3,13 @@
 **日期**：2026-06-22（v2 更新：补充自知三代演化、Exp-B 自指优化、TASK-151 方向）
 **数据来源**：git log（302 commits，2026-06-22 早晨快照）、backlog（103 tasks）、meta-cc work_patterns
 
+**关联文档**：
+- [`discussion-judgment-ux.md`](discussion-judgment-ux.md) — 人类判断 UX 与 GCL 负担的交互设计
+- [`cc-actor-network-discussion.md`](cc-actor-network-discussion.md) — Claude Code actor network 架构分析
+- [`gcl-hypothesis-discussion.md`](gcl-hypothesis-discussion.md) — GCL 假说体系（H1–H7）
+- [`proposals/proposal-situational-awareness.md`](proposals/proposal-situational-awareness.md) — 情境感知提案（GCL 内生化观测）
+- [`proposals/proposal-self-direction-generative-engine.md`](proposals/proposal-self-direction-generative-engine.md) — 自拓：生成引擎与第四自能力（2026-06-24）
+
 ---
 
 ## 概念框架：三个词的区分
