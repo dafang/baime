@@ -71,3 +71,43 @@ for t, vals in sorted(by_type.items()):
     print(f'{t}: mean={statistics.mean(vals):.1f} n={len(vals)}')
 "
 ```
+
+## 后验反馈字段（Phase C 回填）
+
+以下字段由 `scripts/gcl-posterior-pipeline.py --phase c` 非破坏性地回填到 gcl-events.jsonl，
+仅在字段为 null 时写入（不覆盖已有非空值）。
+
+| 字段 | 类型 | 说明 | 允许值 |
+|------|------|------|--------|
+| gate_outcome | string | gate 后验结果 | "pass" \| "escape" \| "unknown" |
+| gate_timing | string | gate 在任务流程中的位置 | "pre-plan" \| "pre-execution" \| "post-execution" \| "unknown" |
+| days_to_detection | float \| null | 从 gate timestamp 到最早后续修正提交的天数差（MTTD 代理指标） | null 或 ≥ 0 |
+| delta_H | float \| null | 后验 H - 自报 H（逃逸事件的 hidden premise 低估量）；无逃逸时为 0 | null 或任意实数 |
+
+### delta_H 定义
+
+**delta_H**（Hidden premise delta）= 后验观测的 H 分量 − 自报的 H 分量。
+
+- 逃逸事件（gate_outcome=escape）：delta_H ≥ 1，表明至少 1 个隐藏前提在 gate 阶段未被识别
+- 无逃逸事件（gate_outcome=pass）：delta_H = 0（无后验证据表明低估）
+- 当前为保守下界估计，基于"逃逸=至少 1 个 hidden premise 被遗漏"的假设
+
+### days_to_detection 定义
+
+**days_to_detection**（MTTD 代理）= 修正提交 timestamp − gate timestamp，单位为天。
+
+- 仅对有后续修正提交（commit_type=corrective）的任务记录非 null 值
+- 修正提交须在 gate timestamp 之后（否则视为历史修正，不计入 MTTD）
+- 多个修正提交时取最早一条
+
+### gate_outcome 定义
+
+- **pass**：gate 通过后无修正提交记录（无逃逸证据）
+- **escape**：git history 中有修正提交且 meta-cc 会话确认用户问题意图（escape_signal=1）
+- **unknown**：有修正提交但 meta-cc 信号模糊（ambiguous）或无窗口匹配（no_window_match）
+
+### gate_timing 定义
+
+- **pre-plan**：proposal gate，在正式 plan 制定前执行
+- **pre-execution**：plan gate，在任务执行前执行
+- **post-execution**：epic-evaluate gate，在执行完成后评估
