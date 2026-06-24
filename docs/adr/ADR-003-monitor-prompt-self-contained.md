@@ -1,3 +1,14 @@
+---
+adr: "003"
+title: "Monitor prompt 必须自包含响应指令"
+status: Accepted
+date: 2026-06-23
+applies-to: ["plugin/skills/**/*.md"]
+enforcement: semantic
+stage: [proposal, plan]
+lint: null
+---
+
 # ADR-003: Monitor prompt 必须自包含响应指令
 
 **Status**: Accepted

@@ -1,3 +1,15 @@
+---
+adr: "001"
+title: "Daemon 脚本归属 plugin，不写入目标项目"
+status: Accepted
+date: 2026-06-23
+applies-to: ["plugin/skills/loop-backlog/SKILL.md", "plugin/skills/loop-backlog/**/*.sh"]
+enforcement: static
+stage: [check]
+lint: |
+  ! grep -rE '\$\{?REPO_ROOT\}?/scripts/basic-daemon' plugin/skills/loop-backlog/SKILL.md 2>/dev/null
+---
+
 # ADR-001: Daemon 脚本归属 plugin，不写入目标项目
 
 **Status**: Accepted

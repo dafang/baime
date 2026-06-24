@@ -1,3 +1,14 @@
+---
+adr: "002"
+title: "Monitor 生命周期 — 启动前必须清理旧进程"
+status: Accepted
+date: 2026-06-23
+applies-to: ["plugin/skills/loop-backlog/SKILL.md"]
+enforcement: runtime
+stage: [plan]
+lint: null
+---
+
 # ADR-002: Monitor 生命周期 — 启动前必须清理旧进程
 
 **Status**: Accepted

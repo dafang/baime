@@ -1,3 +1,15 @@
+---
+adr: "004"
+title: "Skill 内部类型名必须带 skill 作用域前缀"
+status: Accepted
+date: 2026-06-23
+applies-to: ["plugin/skills/**/*.md"]
+enforcement: static
+stage: [check]
+lint: |
+  ! grep -rE '^(type|interface|data)\s+[A-Z][a-zA-Z]+\s*=' plugin/skills/*/SKILL.md 2>/dev/null | grep -v '::\s*[A-Z]' | grep -vE '(Worktree|Outcome|Task|SubTask|Event|Context|Config|Reason|Lang|Path|Bool|Int|String)' | head -1 | grep .
+---
+
 # ADR-004: Skill 内部类型名必须带 skill 作用域前缀
 
 **Status**: Accepted
