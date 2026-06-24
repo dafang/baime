@@ -368,6 +368,24 @@ If `$TMPDIR/etb-entry-point.txt` contains `PlanLoop`: skip phase 1b and phases 2
 > "
 >    ```
 >    Replace `<TASK_ID>`, `<E>`, `<C>`, `<H>` with the actual values from the self-report.
+>
+>    **Reliability sampling (~10% of gates):** After appending the primary JSONL record above,
+>    check whether this task falls in the ~10% reliability sample:
+>    ```python
+>    import hashlib
+>    if int(hashlib.md5('<TASK_ID>'.encode()).hexdigest(), 16) % 10 == 0:
+>    ```
+>    If and only if the condition is true, perform a second independent GCL self-report pass:
+>    - Re-read the same gate content (epic proposal) with fresh eyes, as if reviewing it for the first time.
+>    - Produce a second premise-ledger with its own E/C/H counts (may differ from run 1).
+>    - Append a second JSONL line to `docs/research/gcl-events.jsonl` with the same fields but
+>      `'sample_run_id': '<TASK_ID>-r2'` (instead of `None`).
+>    - Log `intra-rater-variance: |H_run1 - H_run2|` by appending to the task notes:
+>      ```bash
+>      backlog task edit <TASK_ID> --append-notes "reliability-sample: intra-rater-variance H=|<H_run1>-<H_run2>|=<diff>"
+>      ```
+>    If the condition is false, skip this block entirely (no second pass, no extra JSONL line).
+>
 >    Print: "Proposal APPROVED. Proceeding to epic plan draft."
 >
 > 4b. ANY criterion fails AND round < 3: fix the failing sections in `$TMPDIR/etb-proposal.md`,
@@ -529,6 +547,24 @@ Each iteration — spawn Task agent with `run_in_background=true` (self-chaining
 > "
 >    ```
 >    Replace `<TASK_ID>`, `<E>`, `<C>`, `<H>` with the actual values from the self-report.
+>
+>    **Reliability sampling (~10% of gates):** After appending the primary JSONL record above,
+>    check whether this task falls in the ~10% reliability sample:
+>    ```python
+>    import hashlib
+>    if int(hashlib.md5('<TASK_ID>'.encode()).hexdigest(), 16) % 10 == 0:
+>    ```
+>    If and only if the condition is true, perform a second independent GCL self-report pass:
+>    - Re-read the same gate content (epic plan) with fresh eyes, as if reviewing it for the first time.
+>    - Produce a second premise-ledger with its own E/C/H counts (may differ from run 1).
+>    - Append a second JSONL line to `docs/research/gcl-events.jsonl` with the same fields but
+>      `'sample_run_id': '<TASK_ID>-r2'` (instead of `None`).
+>    - Log `intra-rater-variance: |H_run1 - H_run2|` by appending to the task notes:
+>      ```bash
+>      backlog task edit <TASK_ID> --append-notes "reliability-sample: intra-rater-variance H=|<H_run1>-<H_run2>|=<diff>"
+>      ```
+>    If the condition is false, skip this block entirely (no second pass, no extra JSONL line).
+>
 >    Print: "Plan APPROVED. Proceeding to finalise."
 >
 > 3b. ANY fail: fix `$TMPDIR/etb-plan.md` (and `$TMPDIR/etb-proposal.md` if needed),
