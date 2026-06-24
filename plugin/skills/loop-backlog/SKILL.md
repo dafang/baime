@@ -1597,6 +1597,87 @@ data_source: meta-cc-session"
 
   backlog task edit "$EPIC_ID" --append-notes "$EPIC_EVIDENCE_PACK"
 
+  # ── Boss CC Channel (TASK-185: dyad experiment, H7 measurement) ─────────────
+  # Collect independent evidence pack BEFORE writing cap:evaluate.
+  # Evidence independence hard constraint: boss reads archguard + meta-cc,
+  # NOT the worker Notes or EPIC_EVIDENCE_PACK written above.
+  # Do NOT alter soft-halt timing or cap:evaluate write order below.
+  BOSS_EVIDENCE_SCRIPT="${BAIME_SCRIPTS}/../../skills/loop-backlog/boss-evidence-pack.sh"
+  BOSS_EVIDENCE_JSON=""
+  if [ -f "$BOSS_EVIDENCE_SCRIPT" ]; then
+    BOSS_EVIDENCE_JSON=$(bash "$BOSS_EVIDENCE_SCRIPT" "$EPIC_ID" 2>/dev/null || echo "")
+  fi
+  if [ -z "$BOSS_EVIDENCE_JSON" ]; then
+    BOSS_EVIDENCE_JSON='{"task_id":"'"$EPIC_ID"'","evidence_source":"unavailable","reason":"script-not-found-or-error","worker_notes_included":false}'
+  fi
+  BOSS_EVIDENCE_SOURCE=$(echo "$BOSS_EVIDENCE_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('evidence_source','unavailable'))" 2>/dev/null || echo "unavailable")
+
+  # Boss CC verdict: LLM evaluates using independent evidence (archguard + meta-cc).
+  # The LLM executing this skill IS the boss CC actor.
+  # Inputs to boss verdict: measured child outcomes + independent evidence pack.
+  # The boss verdict SUPPLEMENTS but does NOT override the measured verdict.
+  BOSS_VERDICT="$VERDICT"  # default to measured verdict
+  BOSS_REASONING="evidence_source=${BOSS_EVIDENCE_SOURCE}; measured_verdict=${VERDICT}"
+
+  # Boss CC reads the independent evidence pack and may adjust reasoning.
+  # Implementation note for the executing LLM:
+  #   - Read $BOSS_EVIDENCE_JSON (archguard change_risk + meta-cc session_signals)
+  #   - Do NOT re-read the epic task Notes to form this verdict
+  #   - If change_risk.max_risk_score > 0.7, prefer ITERATE even if measured=FINISH
+  #   - If session_signals.error_count > 5 and measured=FINISH, note concern but keep FINISH
+  #   - Set BOSS_VERDICT and BOSS_REASONING accordingly
+  BOSS_CHANGE_RISK=$(echo "$BOSS_EVIDENCE_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+cr = d.get('change_risk') or {}
+print(str(cr.get('max_risk_score', 0)))
+" 2>/dev/null || echo "0")
+
+  backlog task edit "$EPIC_ID" --append-notes "## Boss CC Verdict (gate_actor_type=llm)
+evidence_pack: ${BOSS_EVIDENCE_SOURCE}
+measured_verdict: ${VERDICT}
+boss_verdict: ${BOSS_VERDICT}
+boss_reasoning: ${BOSS_REASONING}
+worker_notes_included: false
+change_risk_score: ${BOSS_CHANGE_RISK}"
+
+  # Write gate_actor_type=llm to gcl-events.jsonl (conditional: TASK-176a schema check)
+  JSONL_PATH="${REPO_ROOT}/docs/research/gcl-events.jsonl"
+  if [ -f "$JSONL_PATH" ] && python3 -c "
+import json
+lines = open('${JSONL_PATH}').readlines()
+fields = set()
+for l in lines[:5]:
+    try: fields.update(json.loads(l).keys())
+    except: pass
+assert 'gate_actor_type' in fields
+" 2>/dev/null; then
+    # Schema confirmed present: write gcl event
+    python3 -c "
+import json, datetime
+GCL_E, GCL_C, GCL_H = 2, 1, 1
+record = {
+  'task_id': '${EPIC_ID}',
+  'gate_type': 'epic-evaluate',
+  'task_kind': 'epic',
+  'timestamp': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+  'E': GCL_E, 'C': GCL_C, 'H': GCL_H, 'GCL': GCL_E + GCL_C + GCL_H,
+  'reviewer_model': 'claude-sonnet-4-6',
+  'sample_run_id': None,
+  'evidence_independence': 'high' if '${BOSS_EVIDENCE_SOURCE}' not in ('unavailable','') else 'unknown',
+  'gate_actor_type': 'llm',
+  'premise_lines': 4,
+  'escape_rate': 0
+}
+with open('${JSONL_PATH}', 'a') as f:
+    f.write(json.dumps(record) + '\n')
+" 2>/dev/null || backlog task edit "$EPIC_ID" --append-notes "gcl-gate-actor: llm (jsonl-write-failed)"
+  else
+    # TASK-176a schema not confirmed: write to Notes as fallback
+    backlog task edit "$EPIC_ID" --append-notes "gcl-gate-actor: llm (pending jsonl)"
+  fi
+  # ── End Boss CC Channel ───────────────────────────────────────────────────────
+
   backlog task edit "$EPIC_ID" \
     --append-notes "cap:evaluate=recommendation:${VERDICT} | done=${DONE}/${TOTAL} needsHuman=${NEEDS} dod_pass=${DOD_OK} | data_source: measured" \
     --append-notes "RECOMMENDATION: ${VERDICT}. To finish: set status → Epic: Done. To iterate: set status → Epic: Proposal or Epic: Plan and re-run /epic-to-backlog."
@@ -1634,6 +1715,67 @@ with open('${REPO_ROOT}/docs/research/gcl-events.jsonl', 'a') as f:
   # soft halt: stay at Epic: Evaluating; cap:evaluate guard makes daemon re-emits no-ops.
 }
 ```
+
+### Human confirmation gate: Epic: Evaluating → Epic: Done (gate_actor_type=human)
+
+When the human confirms FINISH by setting status → `Epic: Done` after reviewing the
+RECOMMENDATION note, the worker MUST record `gate_actor_type=human` for H7 measurement.
+
+This transition is NOT automated — the human sets status manually. The worker detects
+it on the next `child-done` or `heartbeat` event by observing the status change.
+
+**When `onChildDone` or a re-enter of `workerLoop` observes `Epic: Done` on a task
+that previously had `Epic: Evaluating`**, write the human confirmation gate event:
+
+```bash
+# Called after detecting Epic: Done on an epic that was previously at Epic: Evaluating.
+# $EPIC_ID: the epic task ID
+# This records the human gate confirmation for H7 measurement.
+recordHumanEpicGate() {
+  local EPIC_ID="$1"
+  JSONL_PATH="${REPO_ROOT}/docs/research/gcl-events.jsonl"
+
+  # Conditional: check TASK-176a schema presence before writing to jsonl
+  if [ -f "$JSONL_PATH" ] && python3 -c "
+import json
+lines = open('${JSONL_PATH}').readlines()
+fields = set()
+for l in lines[:5]:
+    try: fields.update(json.loads(l).keys())
+    except: pass
+assert 'gate_actor_type' in fields
+" 2>/dev/null; then
+    # Schema confirmed: write human gate event to gcl-events.jsonl
+    python3 -c "
+import json, datetime
+record = {
+  'task_id': '${EPIC_ID}',
+  'gate_type': 'epic-evaluate',
+  'task_kind': 'epic',
+  'timestamp': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+  'E': 0, 'C': 0, 'H': 0, 'GCL': 0,
+  'reviewer_model': 'human',
+  'sample_run_id': None,
+  'evidence_independence': 'human-review',
+  'gate_actor_type': 'human',
+  'premise_lines': None,
+  'escape_rate': 0
+}
+with open('${JSONL_PATH}', 'a') as f:
+    f.write(json.dumps(record) + '\n')
+" 2>/dev/null || backlog task edit "$EPIC_ID" --append-notes \
+        "gcl-gate-actor: human (jsonl-write-failed — $(date -u +%Y-%m-%dT%H:%M:%SZ))"
+  else
+    # TASK-176a schema not confirmed: write to Notes as fallback
+    backlog task edit "$EPIC_ID" --append-notes \
+      "gcl-gate-actor: human evidence_independence: human-review (pending jsonl)"
+  fi
+}
+```
+
+**Important**: Place `recordHumanEpicGate` call AFTER detecting `Epic: Done` status
+and BEFORE any further status transitions. Do NOT modify the soft-halt state machine
+or call this function before the human has set the status to `Epic: Done`.
 
 ## Shutdown
 
