@@ -114,6 +114,14 @@ loop-backlog 现有机制——unified daemon 发射事件 → Monitor tail → 
 
 这些阶段的共同点：有外部可观测物，且价值不完全依赖"最终责任归属"。**C 变量可以先由人类产品负责人 / tech lead / repo owner 兜底，而 actor-network 负责扩大 A/B 阶段的吞吐。**
 
+### 4.6 接地把 insight/开放任务也纳入射程
+
+上面七个阶段偏执行性，容易让人误以为 actor-network 只适合"已经定义清楚的活儿"，而设计取舍、架构判断、产品品味、问题定义这类开放/insight 任务仍须人来做。这个退守线站不住（gcl-complete §4.2、H8）：**从信息处理视角，人与机器（含大模型）的处理机制无本质差异；开放任务上人的暂时优势是 grounding 存量优势，不是处理机制优势。**
+
+而 grounding 正是 §4.4 三类接地锚点要解决的东西——参考实现、交付物观测、评价机制，本质上就是把"对真实世界的持续观察"工程化地喂给机器 actor。这意味着：**同一套接地基础设施，在弥合执行任务的证据独立性的同时，也在弥合开放任务的 grounding 差距。** 一个能持续观测产品空间、竞品、用户路径、事故历史、运行指标的 actor 网络，对 insight 任务的处理能力会随接地存量增长而上升，而非永久受限。
+
+因此接地开发加速层的射程不止于执行阶段。它的自然延伸是：在 grounding 受控（同等真实世界观测证据包）下，把 boss/meta actor 也用于开放判断——例如架构方案对比、问题定义复审、产品 variant 的取舍预筛——并用 H8 的可证伪规则度量其与人类产出的差距及随时间的收窄。人保留的，最终只剩 B（偏好来源）与 C（制度责任），而非任何"开放任务必须人来想"的类别。
+
 ---
 
 ## 5. 与 judgment-ux 方向的关系
@@ -122,7 +130,7 @@ loop-backlog 现有机制——unified daemon 发射事件 → Monitor tail → 
 
 相反方向是 docs/research/judgment-ux.md：当人确实需要介入时，怎样把独立证据最高质量地递给人。
 
-两者的连接点：actor-network 的 dyad 实验（§3）直接产出 judgment-ux 所依赖假设（"LLM-judge + 独立证据是否真比人强"）的对照数据。如果 H7 在 dyad 实验中成立，judgment-ux 的"选择性打断"就有了实证依据——大量 routine gate 可以安全地交给 LLM-boss，人只保留 A/B/C 三类 gate。
+两者的连接点：actor-network 的 dyad 实验（§3）直接产出 judgment-ux 所依赖假设（"LLM-judge + 独立证据是否真比人强"）的对照数据。如果 H7 在 dyad 实验中成立，judgment-ux 的"选择性打断"就有了实证依据——大量 routine gate 可以安全地交给 LLM-boss；若 H8 进一步成立，开放/insight 任务在 grounding 受控下也可交给 machine actor，人最终只保留 B（偏好来源）与 C（制度责任）两类 gate。
 
 ---
 
@@ -137,3 +145,5 @@ loop-backlog 现有机制——unified daemon 发射事件 → Monitor tail → 
 > 在相同需求输入、相同参考实现、相同验收标准下，actor-network 相比单 Claude Code / Codex 或人类低密度操作，是否能以更低人工介入、更短 wall-clock、更低返工率，交付同等或更高验收率的结果？
 
 这个 framing 把问题从宏大的"自治组织是否可能"，降级成可实验的"接地开发闭环是否增益"。更容易设计，也更容易赢。
+
+**对 insight 任务的延伸（H8）**：在执行阶段的生产函数验证之后，把同一指标用于开放任务——在 grounding 受控（同等真实世界观测证据包）下，度量 machine actor 在架构对比、问题定义复审、产品 variant 预筛等 insight 任务上与人类产出的质量差距，并观察该差距是否随接地存量扩展而收窄（见 §4.6、gcl-complete §5 H8）。

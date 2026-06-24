@@ -73,6 +73,10 @@
 
 **对 GCL 的含义**：高 H 往往不是"人很有价值"，而是"系统没有把必要上下文外化"。H 是 context externalization gap 的代理量，不是人类洞察力的代理量。
 
+**进一步：A 不为开放/insight 任务保留例外。** 容易把 A 退守到"事实判断可以交给机器，但开放性洞察、品味、判断仍然需要人"。这条退守线也站不住。**从信息处理的视角，人与机器（含大模型）的处理机制没有本质差异**——同样是在表征上做模式识别、压缩、外推、组合。当前可观察的主要差异不在"机制"，而在**对真实世界的持续观察**（grounding）：人长期、连续、多模态地接触产品、用户、事故、市场，积累了尚未进入任何 evidence channel 的观察。这正是 A 的真实内容。而 grounding 是可以被工程化弥合的（持续观测管线、遥测、回放、外部数据接入——见 cc-actor-network.md §4.4 的三类接地锚点），中长期这一差异也会收窄。
+
+因此 insight 等开放任务同样可以、且应当逐步交给充分接地的机器信息处理机制。人在开放任务上的暂时优势，是 grounding 存量的优势，不是处理机制的优势；它随接地基础设施建设而递减，而非永久保留。这把"为人保留的 gate"进一步收窄到 **B（偏好来源）和 C（制度责任）**——这两者本就不是信息处理优劣问题。
+
 #### B. Preference anchoring（偏好锚定）：人是否代表目标函数来源？
 
 "是否值得为了速度接受 regression 风险"可以拆成两部分：
@@ -138,6 +142,14 @@
 > **H7**：Routine engineering gate 的监督质量与 gate actor 是否为人类无关；human presence 的主要效果是增加延迟（成本），而非提高信号准确性（效益）。监督质量的主要预测变量是 evidence_independence，与 §4.2 的三变量拆解一致。
 
 **可证伪规则**：在控制 evidence_independence 的情况下，human vs automated gate actor 对 escape rate 无显著差异（routine gate 子集）。需要将 `gate_actor_type`（human/llm/hybrid/tool）加入 gcl-events.jsonl schema，配合 H6 的 `evidence_independence` 字段联合检验。
+
+### H8：开放/insight 任务上的人机差距由 grounding 解释，而非处理机制本质差异
+
+> **H8**：在开放性 / insight 任务（设计取舍、架构判断、产品品味、问题定义）上，人与机器信息处理机制的质量差距，主要由对真实世界的持续观察（grounding）存量解释，而非由处理机制的本质差异解释。控制 grounding 接入后，差距不显著；且随接地基础设施建设，残差差距随时间收窄。
+
+**含义**：H7 把"无差异"结论建立在 routine gate 上；H8 把它推广到开放任务——条件是 grounding 被显式控制/补齐。两者合起来意味着：为人保留的判断点最终只剩 B（偏好来源）和 C（制度责任），而非任何"人在信息处理上更强"的类别。
+
+**可证伪规则**：在控制 grounding 接入（同等真实世界观测证据包）的前提下，human vs machine 在 insight 任务上的产出质量（由独立评审 + 下游 escape/rework 度量）无显著差异；并且在两个时间点之间，随 grounding 管线扩展，machine 侧的残差差距显著缩小。需要一个带 grounding 接入标注的 insight-task 评测集；这是 cc-actor-network.md §6 "接地开发加速层"实验的自然延伸。
 
 ### 对 GCL 框架定义的修订
 

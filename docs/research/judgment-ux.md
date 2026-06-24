@@ -52,6 +52,8 @@ judgment console 不需要从零建后端。现有三个项目正好各供一条
 - **High-accountability gate（C）**：UX 任务是"打包 automated evidence pack + 提供可签字的责任入口"。这里人是责任主体，不是更准的判断者。
 - **Meta-governance gate（B+C）**：UX 任务是"呈现机制变更的多版本对比 + escape/rework 历史"，让人选择采用哪个制度设计。
 
+注意：这里没有为 A（epistemic contribution）单独保留一类 gate。A 不是判断主体类别，而是"系统尚未把上下文外化"导致 H 偏高的原因。**且 A 不为开放/insight 任务保留例外**（gcl-complete §4.2、H8）：从信息处理视角人机机制无本质差异，开放任务上的人类暂时优势只是 grounding 存量优势，随接地基础设施建设而递减。因此 judgment console 的覆盖面是**收缩**的——它服务的 A 类高 H 场景会随 evidence channel / grounding 管线建设而减少，长期只剩 B / C 两类真正需要人的 gate。console 的设计应假设自己是一个过渡期工具，而非永久审核台。
+
 ### 3.2 压缩的下界（H5 在 UX 层）
 
 H5 说 GCL 压到零会让 gate 退化成橡皮图章。在 UX 层，这意味着 console **不能**把一个 high-accountability gate 简化成一个按钮。压缩的目标是"去掉 routine 噪声"，不是"去掉判断所需的实质信息"。判据：压缩后人仍能复述出他在为什么风险背书。
