@@ -1,3 +1,15 @@
+---
+adr: "006"
+title: "backlog CLI flag 白名单校验"
+status: Accepted
+date: 2026-06-23
+applies-to: ["plugin/skills/**/*.md", "scripts/validate-plugin.sh"]
+enforcement: static
+stage: [check]
+lint: |
+  test -f scripts/backlog-cli-contract.json
+---
+
 # ADR-006: backlog CLI flag 白名单校验
 
 **Status**: Accepted

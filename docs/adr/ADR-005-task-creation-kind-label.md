@@ -1,3 +1,15 @@
+---
+adr: "005"
+title: "任务创建调用必须包含 kind 标签"
+status: Accepted
+date: 2026-06-23
+applies-to: ["backlog/tasks/**/*.md"]
+enforcement: static
+stage: [check]
+lint: |
+  bash scripts/verify-kind-status.sh
+---
+
 # ADR-005: 任务创建调用必须包含 kind 标签
 
 **Status**: Accepted
