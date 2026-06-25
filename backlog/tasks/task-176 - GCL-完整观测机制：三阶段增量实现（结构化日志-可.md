@@ -1,14 +1,14 @@
 ---
 id: TASK-176
 title: GCL 完整观测机制：三阶段增量实现（结构化日志 + 可
-status: 'Epic: Backlog'
+status: 'Epic: Done'
 assignee: []
 created_date: '2026-06-23 16:45'
-updated_date: '2026-06-23 17:10'
+updated_date: '2026-06-24 07:05'
 labels:
   - 'kind:epic'
 dependencies: []
-ordinal: 114000
+ordinal: 1000
 ---
 
 ## Description
@@ -126,4 +126,31 @@ cap:propose=approved
 Plan updated 2026-06-23: added H6 (evidence_independence), evidence_independence field to schema (176a), H5+H6 combined validation (176f), two-sided alert constraint (176h).
 
 Plan updated 2026-06-23: added H7 hypothesis and gate_actor_type field to schema (176a), extended 176f to cover H7 validation (now gcl-h5-h6-h7-validation.md), added H7 constraint and three-variable decomposition (A/B/C) framing to Constraints section.
+
+cap:decompose=started
+Epic decomposition started: 2026-06-24T06:10Z
+Agent will create 8 child tasks (176a–176h) via task-to-backlog (doc-only) and feature-to-backlog (code-change).
+
+cap:decompose=done
+All 8 children created: TASK-176.1, TASK-176.2, TASK-176.3, TASK-176.4, TASK-176.5, TASK-176.6, TASK-176.7, TASK-176.8. R1 guard passed.
+
+Sub-task TASK-176.3 completed: 2026-06-24T06:42:56Z
+
+Sub-task TASK-176.4 completed: 2026-06-24T06:44:19Z
+
+Sub-task TASK-176.5 completed: 2026-06-24T06:47:58Z
+
+Sub-task TASK-176.6 completed: 2026-06-24T06:54:57Z
+
+Sub-task TASK-176.7 completed: 2026-06-24T06:54:59Z
+
+Sub-task TASK-176.8 completed: 2026-06-24T07:02:10Z
+
+cap:evaluate=recommendation:FINISH | done=8/8 needsHuman=0 dod_pass=true | all children Basic: Done, DoD verified | data_source: measured
+
+RECOMMENDATION: FINISH.
+To finish: set status → Epic: Done.
+To iterate: set status → Epic: Proposal or Epic: Plan and re-run /epic-to-backlog.
+
+Epic closed: 2026-06-24T07:05:54Z. All 8 sub-tasks Basic: Done. RECOMMENDATION was FINISH.
 <!-- SECTION:NOTES:END -->

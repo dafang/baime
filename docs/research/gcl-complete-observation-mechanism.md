@@ -213,3 +213,7 @@
 | Rating Roulette — [Self-Inconsistency in LLM-As-A-Judge](https://arxiv.org/pdf/2510.27106) | 同一 LLM 跨运行一致性达不到 0.8 | §3 效度问题 |
 | [LLM-as-a-judge survey (ScienceDirect 2025)](https://www.sciencedirect.com/science/article/pii/S2666675825004564) | Position/verbosity/self-enhancement bias | §3 效度问题 |
 | [Measuring Cognitive Load of Software Developers (ICPC 2019)](https://kleinnerfarias.github.io/pdf/articles/icpc-2019.pdf) | 软件工程认知负载测量综述 | 方法论背景 |
+| [MIT Sloan: AI Explainability — How to Avoid Rubber-Stamping Recommendations](https://sloanreview.mit.edu/article/ai-explainability-how-to-avoid-rubber-stamping-recommendations/) | 管理实践层面命名 rubber stamp 风险；450 名临床医生实验：AI 辅助下诊断准确率从 73% 降至 61.7%（Dietz et al. 2025）；是 H5 下界"gate 退化"的最新实证 | §3 效度问题 / §4 设计张力 |
+| [International AI Safety Report 2026](https://arxiv.org/pdf/2602.21012) | 将 rubber stamp / approval fatigue 列为 AI 安全报告级别的系统性风险；确认 GCL 观测的优先级从"研究兴趣"提升到"系统安全属性" | §1 目标校准 |
+| [Automated Self-Testing as a Quality Gate (arxiv 2603.15676)](https://arxiv.org/html/2603.15676v1) | evidence coverage 是最重要的严重回归判别器；PROMOTE/HOLD/ROLLBACK 决策架构与 verifyDod 结构同构；LLM 应用发布层面的 evidence-driven gate 先例 | §6 落地增量规划 |
+| [Beyond Final Code: Process-Oriented Error Analysis of Software Development Agents (arxiv 2503.12374)](https://arxiv.org/pdf/2503.12374) | 分析 agent **实际执行过程**（而非最终产出），识别过程层错误模式；meta-cc session digest 方案的直接学术对应物 | §2 四支柱评估 / §6 落地增量 |

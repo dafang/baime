@@ -147,3 +147,13 @@ loop-backlog 现有机制——unified daemon 发射事件 → Monitor tail → 
 这个 framing 把问题从宏大的"自治组织是否可能"，降级成可实验的"接地开发闭环是否增益"。更容易设计，也更容易赢。
 
 **对 insight 任务的延伸（H8）**：在执行阶段的生产函数验证之后，把同一指标用于开放任务——在 grounding 受控（同等真实世界观测证据包）下，度量 machine actor 在架构对比、问题定义复审、产品 variant 预筛等 insight 任务上与人类产出的质量差距，并观察该差距是否随接地存量扩展而收窄（见 §4.6、gcl-complete §5 H8）。
+
+---
+
+## 7. 外部文献引用
+
+| 来源 | 核心贡献 | 关联 |
+|------|---------|------|
+| [CodeX-Verify: Multi-Agent Code Verification via Information Theory](https://arxiv.org/pdf/2511.16708) | 用互信息次模性证明：检测模式**条件独立**的 agent 组合优于任何单一 agent；边际增益 +14.9/+13.5/+11.2 pp；是 H6 在代码 bug 检测域的信息论证明 | §4.1 克隆耦合 / §3 Dyad 理论上界 |
+| [Verifier Pattern in Multi-Agent Systems — MindStudio](https://www.mindstudio.ai/blog/verifier-pattern-multi-agent-systems-independent-review) | 命名"同模型同 context 生成+验证 = 自我确认"的工程模式；独立验证者无法持有原始偏假设，这是与 §4.1 克隆耦合约束的直接对应实现 | §4.1 克隆耦合 |
+| [Rubber Stamp Risk: Why Human Oversight Can Become False Confidence](https://cybermaniacs.com/cm-blog/rubber-stamp-risk-why-human-oversight-can-become-false-confidence) | 量化 rubber stamp 在 AI-assisted 决策中的出现条件：量大 + 快速 + 不透明 → 人类盖章退化为仪式；这是§4.1 网络层 H6 失效的人类 gate 侧版本 | §4.1 克隆耦合 / §4.2 问责真空 |

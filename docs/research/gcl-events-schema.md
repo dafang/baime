@@ -22,6 +22,8 @@
 | gate_actor_type | string | gate 执行者类型（H7 字段） | "human" \| "llm" \| "hybrid" \| "tool" |
 | premise_lines | integer \| null | premise-ledger 中的前提条目总数；未记录时为 null | null 或 ≥ 0 |
 | escape_rate | integer | gate 通过后该任务是否发生逃逸（0=无逃逸，1=逃逸） | 0 \| 1 |
+| gate_outcome | string | gate 决策结果（gate 形态字段，见 gate-temporal-portfolio.md） | "approved" \| "deferred" \| "iterate" \| "abandoned" |
+| gate_timing | string | gate 相对执行的时序（形态字段） | "prior" \| "posterior" \| "batch" |
 
 ## escape_rate 定义
 
@@ -29,8 +31,11 @@
 
 1. 任务状态曾到达 `Basic: Needs Human`（reaper 触发的人工干预）
 2. 任务 Notes 中出现 `Requeued by reaper` 或等效的 reaper 重新排队记录
+3. **gate 通过的改动后来被 git revert，或其 branch 被弃用重开**（后验 gate 的逃逸信号——见 gate-temporal-portfolio.md 形态 R）
 
 **无逃逸（escape_rate=0）**：gate 通过后任务成功完成，无上述逃逸迹象。保守原则：无明确逃逸证据的记录默认为 0。
+
+**形态字段与 escape 的关系**：`gate_timing=posterior` 的记录（乐观执行 + 后验回退）天然把 git revert 作为主逃逸信号，而非 Needs Human；`gate_outcome=deferred` 的记录是搁置事件，其 escape_rate 在任务最终去向确定前为 null（被复活=0，被批量归档=不计入 escape，作为单独的"无效搁置"统计）。
 
 **提取方法**：
 
