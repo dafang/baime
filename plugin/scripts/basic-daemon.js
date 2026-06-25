@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// daemon-version: v9
+// daemon-version: v10
 /**
  * basic-daemon.js — UNIFIED B″ poller. Polls backlog tasks dir and emits FIVE
  * event channels to stdout:
@@ -7,7 +7,10 @@
  *   basic-ready:TASK-N       kind:basic AND status "Basic: Ready"   → worker executes task
  *   epic-ready:TASK-N        kind:epic  AND status "Epic: Ready"    → worker auto-decomposes
  *   child-done:TASK-N        kind:basic AND status "Basic: Done" AND has parent_task_id
- *                                                                   → worker re-checks parent epic
+ *                            AND the parent epic is still at "Epic: Awaiting Children"
+ *                            (the only state where onChildDone is actionable; gating here
+ *                             stops the 60s pulse from re-emitting forever once the parent
+ *                             epic advances to Evaluating/Done) → worker re-checks parent epic
  *   proposal-approved:TASK-N status "Basic: Plan" or "Epic: Plan" AND marker file
  *                            backlog/.ftb-awaiting-plan-TASK-N exists → worker runs plan draft
  *   plan-approved:TASK-N     status "Basic: Backlog"/"Basic: Ready"/"Epic: Backlog" AND marker
@@ -20,6 +23,7 @@ const path = require('path');
 const BASIC_READY_STATUS = 'basic: ready';
 const EPIC_READY_STATUS  = 'epic: ready';
 const BASIC_DONE_STATUS  = 'basic: done';
+const EPIC_AWAITING_CHILDREN_STATUS = 'epic: awaiting children';
 
 function parseArgs(argv) {
   const args = {
@@ -90,11 +94,28 @@ function isEpicReady(filepath) {
   return meta.hasKindEpic && !meta.hasKindBasic && meta.status === EPIC_READY_STATUS;
 }
 
-function isChildDone(filepath) {
+// Locate a task .md file by its task id (e.g. "TASK-3") within tasksDir.
+function findTaskFileById(tasksDir, taskId) {
+  let entries;
+  try { entries = fs.readdirSync(tasksDir); } catch { return null; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    if (parseTaskId(entry) === taskId) return path.join(tasksDir, entry);
+  }
+  return null;
+}
+
+// child-done is actionable ONLY while the parent epic is still awaiting reconciliation.
+// Without this gate, a child stuck at "Basic: Done" with a parent matches forever, and the
+// 60s level-triggered pulse re-emits it indefinitely even after the parent epic is Done.
+function isChildDone(filepath, tasksDir) {
   const meta = readTaskMeta(filepath);
   if (!meta) return false;
-  return meta.hasKindBasic && !meta.hasKindEpic
-      && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id;
+  if (!(meta.hasKindBasic && !meta.hasKindEpic
+        && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id)) return false;
+  const parentPath = findTaskFileById(tasksDir, meta.parent_task_id);
+  const pmeta = parentPath ? readTaskMeta(parentPath) : null;
+  return !!pmeta && pmeta.hasKindEpic && pmeta.status === EPIC_AWAITING_CHILDREN_STATUS;
 }
 
 function scanIds(tasksDir, predicate) {
@@ -162,7 +183,7 @@ function computePulseLines(tasksDir, channels) {
 const channels = [
   { prefix: 'basic-ready',       predicate: f => isBasicReady(f),                   notified: new Set() },
   { prefix: 'epic-ready',        predicate: f => isEpicReady(f),                    notified: new Set() },
-  { prefix: 'child-done',        predicate: f => isChildDone(f),                    notified: new Set() },
+  { prefix: 'child-done',        predicate: f => isChildDone(f, args.tasksDir),     notified: new Set() },
   { prefix: 'proposal-approved', predicate: f => isProposalApproved(f, backlogDir), notified: new Set() },
   { prefix: 'plan-approved',     predicate: f => isPlanApproved(f, backlogDir),     notified: new Set() },
 ];

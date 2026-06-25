@@ -6,9 +6,10 @@
  *   basic-ready  kind:basic AND Basic: Ready
  *   epic-ready   kind:epic  AND Epic: Ready          (ONLY Epic: Ready — not other Epic:* states)
  *   child-done   kind:basic AND Basic: Done AND has parent_task_id
+ *                AND the parent epic is still at "Epic: Awaiting Children" (gate)
  *
  * Verifies correct routing, no cross-channel emission, parent_task_id parsing, and that
- * scripts/basic-daemon.js carries daemon-version: v9 and wires all five channels.
+ * scripts/basic-daemon.js carries daemon-version: v10 and wires all five channels.
  *
  * Exits 0 on all pass, non-zero on fail.
  */
@@ -22,6 +23,24 @@ const os   = require('os');
 const BASIC_READY_STATUS = 'basic: ready';
 const EPIC_READY_STATUS  = 'epic: ready';
 const BASIC_DONE_STATUS  = 'basic: done';
+const EPIC_AWAITING_CHILDREN_STATUS = 'epic: awaiting children';
+
+function parseTaskId(filename) {
+  const base = path.basename(filename, path.extname(filename)).toUpperCase();
+  const first = base.split(/\s+/)[0];
+  const m = first.match(/^([A-Za-z][A-Za-z0-9]*-\d+(?:\.\d+)*)$/);
+  return m ? m[1] : null;
+}
+
+function findTaskFileById(tasksDir, taskId) {
+  let entries;
+  try { entries = fs.readdirSync(tasksDir); } catch { return null; }
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    if (parseTaskId(entry) === taskId) return path.join(tasksDir, entry);
+  }
+  return null;
+}
 
 function parseLabels(fm) {
   let labels = [];
@@ -72,11 +91,14 @@ function isEpicReady(filepath) {
   return meta.hasKindEpic && !meta.hasKindBasic && meta.status === EPIC_READY_STATUS;
 }
 
-function isChildDone(filepath) {
+function isChildDone(filepath, tasksDir = path.dirname(filepath)) {
   const meta = readTaskMeta(filepath);
   if (!meta) return false;
-  return meta.hasKindBasic && !meta.hasKindEpic
-      && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id;
+  if (!(meta.hasKindBasic && !meta.hasKindEpic
+        && meta.status === BASIC_DONE_STATUS && !!meta.parent_task_id)) return false;
+  const parentPath = findTaskFileById(tasksDir, meta.parent_task_id);
+  const pmeta = parentPath ? readTaskMeta(parentPath) : null;
+  return !!pmeta && pmeta.hasKindEpic && pmeta.status === EPIC_AWAITING_CHILDREN_STATUS;
 }
 
 // ── Test helpers ──
@@ -143,10 +165,13 @@ try {
     }
   }
 
-  // Test 5: child-done channel — kind:basic + Basic: Done + parent_task_id
+  // Test 5: child-done channel — kind:basic + Basic: Done + parent_task_id, GATED on the
+  //         parent epic still being at "Epic: Awaiting Children" (the only actionable state).
   {
+    // Parent epic awaiting children → child-done emits.
+    makeTaskFile(tmpDir, 'TASK-50', 'Epic: Awaiting Children', ['kind:epic']);
     const withParent = makeTaskFile(tmpDir, 'TASK-5', 'Basic: Done', ['kind:basic'], 'TASK-50');
-    assert(isChildDone(withParent) === true,  'Test 5a: kind:basic + Basic: Done + parent → child-done');
+    assert(isChildDone(withParent) === true,  'Test 5a: Basic: Done + parent at Awaiting Children → child-done');
     assert(isBasicReady(withParent) === false, 'Test 5b: Basic: Done → no basic-ready');
 
     const noParent = makeTaskFile(tmpDir, 'TASK-5N', 'Basic: Done', ['kind:basic']);
@@ -154,6 +179,16 @@ try {
 
     const epicDone = makeTaskFile(tmpDir, 'TASK-5E', 'Epic: Done', ['kind:epic'], 'TASK-50');
     assert(isChildDone(epicDone) === false, 'Test 5d: kind:epic Done → no child-done (basic channel only)');
+
+    // Parent epic already Done → child-done SUPPRESSED (regression: stops the 60s pulse from
+    // re-emitting forever once the epic is reconciled). Parent TASK-51 is Epic: Done.
+    makeTaskFile(tmpDir, 'TASK-51', 'Epic: Done', ['kind:epic']);
+    const doneParent = makeTaskFile(tmpDir, 'TASK-5D', 'Basic: Done', ['kind:basic'], 'TASK-51');
+    assert(isChildDone(doneParent) === false, 'Test 5e: parent epic Done → child-done suppressed (gate)');
+
+    // Parent epic missing entirely → suppressed (no actionable reconciliation target).
+    const orphan = makeTaskFile(tmpDir, 'TASK-5O', 'Basic: Done', ['kind:basic'], 'TASK-999');
+    assert(isChildDone(orphan) === false, 'Test 5f: parent epic missing → child-done suppressed');
   }
 
   // Test 6: kind:basic non-Ready/non-Done statuses → no emission on any channel
@@ -189,7 +224,7 @@ try {
     assert(fs.existsSync(daemon), 'Test 9a: plugin/scripts/basic-daemon.js exists');
     if (fs.existsSync(daemon)) {
       const content = fs.readFileSync(daemon, 'utf8');
-      assert(content.slice(0, 300).includes('daemon-version: v9'), 'Test 9b: basic-daemon.js has daemon-version: v9');
+      assert(content.slice(0, 300).includes('daemon-version: v10'), 'Test 9b: basic-daemon.js has daemon-version: v10');
       assert(content.includes('basic-ready'),       'Test 9c: emits basic-ready');
       assert(content.includes('epic-ready'),        'Test 9d: emits epic-ready');
       assert(content.includes('child-done'),        'Test 9e: emits child-done');

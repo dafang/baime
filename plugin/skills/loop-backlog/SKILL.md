@@ -685,11 +685,19 @@ if [ "$DAEMON_RUNNING" = "false" ]; then
 fi
 
 CHECKPOINT_FILE="${BACKLOG_DIR}/.loop-checkpoint"
-OFFSET=$(cat "$CHECKPOINT_FILE" 2>/dev/null || echo 0)
-# Clamp to actual file size (protects against log rotation or truncation)
 LOG_SIZE=$(wc -c < "$DAEMON_LOG" 2>/dev/null || echo 0)
-if [ "$OFFSET" -gt "$LOG_SIZE" ]; then OFFSET=0; fi
-echo "daemonBootstrap: resuming from byte offset $OFFSET (log size $LOG_SIZE)"
+# Cold-start replay policy: START THE MONITOR AT THE CURRENT LOG EOF — do NOT replay the
+# checkpointed history. Only events that ARRIVE AFTER the Monitor is armed get full dispatch.
+# Rationale: replaying historical lines forced the worker to investigate already-settled
+# events file-by-file (backlog task view + parent lookup per line), costing minutes on cold
+# start. This is safe because ALL FIVE daemon channels are level-triggered and self-clearing
+# (basic/epic-ready clear on claim/advance; proposal/plan-approved gated on marker files;
+# child-done gated on parent epic == "Epic: Awaiting Children" — see ADR-009): the daemon's
+# 60s pulse re-surfaces any still-actionable state within one interval, and Basic: Ready is
+# claimed synchronously by claimBatch BEFORE the Monitor is even armed. Genuinely-stale
+# history (parent terminal, already-reconciled) is simply never replayed.
+OFFSET="$LOG_SIZE"
+echo "daemonBootstrap: cold-start — Monitor starts at log EOF (offset $OFFSET); historical events skipped, pulse re-surfaces actionable state"
 
 # Clean up stale merge-lock (may be left if /clear killed the worker mid-merge)
 MERGE_LOCK="${BACKLOG_DIR}/.merge-lock"
@@ -717,9 +725,10 @@ if [ -f "$ACTIVE_AGENTS_FILE" ]; then
   echo "daemonBootstrap: active-agents reconciled: $(cat "$ACTIVE_AGENTS_FILE" | xargs)"
 fi
 
-# Baseline checkpoint: write current log end-of-file offset BEFORE creating Monitor.
-# This ensures that if context compression occurs during idle Monitor blocking,
-# the next cold-start resumes from this point rather than OFFSET=0.
+# Baseline checkpoint: record current log end-of-file offset for observability/bookkeeping.
+# NOTE: cold start no longer READS this to seed OFFSET — the replay policy above always
+# starts the Monitor at log EOF — so this write is informational only (kept for the
+# post-Monitor checkpoint advance and for operators inspecting .loop-checkpoint).
 echo $(wc -c < "$DAEMON_LOG" 2>/dev/null || echo 0) > "$CHECKPOINT_FILE"
 echo "daemonBootstrap: baseline checkpoint written (offset=$(cat "$CHECKPOINT_FILE"))"
 ```
