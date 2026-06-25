@@ -16,11 +16,11 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateEnv, getModelPrimary } from '../lib/env.js';
 import { runExperiment, type ExperimentConfig, type FixtureRecord } from '../lib/runner.js';
+import { loadFixturePaths, buildExperimentConfig } from '../lib/config-builder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXP_ROOT = join(__dirname, '..');
@@ -114,13 +114,6 @@ export function scoreDecompResponse(response: string, fixture: DecompFixture): n
   return 0.0;
 }
 
-// ---------- Load fixtures ----------
-
-async function loadFixturePaths(dir: string): Promise<string[]> {
-  const files = (await readdir(dir)).filter(f => f.endsWith('.json')).sort();
-  return files.map(f => join(dir, f));
-}
-
 // ---------- Build ExperimentConfig ----------
 
 export async function buildConfig(opts: {
@@ -132,28 +125,27 @@ export async function buildConfig(opts: {
   const sanityDir = join(EXP_ROOT, 'fixtures/exp-i/sanity');
   const allPaths = await loadFixturePaths(fixtureDir);
 
-  const config: ExperimentConfig = {
-    variants: {
-      V0: allPaths,
-      V1: allPaths,
-    },
-    modelList: [getModelPrimary(), 'claude-sonnet-4-6'],
-    k: opts.k,
-    outDir: opts.outDir,
-    sanityDir,
+  return buildExperimentConfig(
+    {
+      variants: {
+        V0: allPaths,
+        V1: allPaths,
+      },
+      modelList: [getModelPrimary(), 'claude-sonnet-4-6'],
+      sanityDir,
 
-    buildPrompt(fixture: FixtureRecord, variant: string): string {
-      const fx = fixture as DecompFixture;
-      if (variant === 'V1') return buildV1Prompt(fx);
-      return buildV0Prompt(fx);
-    },
+      buildPrompt(fixture: FixtureRecord, variant: string): string {
+        const fx = fixture as DecompFixture;
+        if (variant === 'V1') return buildV1Prompt(fx);
+        return buildV0Prompt(fx);
+      },
 
-    scoreResponse(response: string, fixture: FixtureRecord): number {
-      return scoreDecompResponse(response, fixture as DecompFixture);
+      scoreResponse(response: string, fixture: FixtureRecord): number {
+        return scoreDecompResponse(response, fixture as DecompFixture);
+      },
     },
-  };
-
-  return config;
+    opts,
+  );
 }
 
 // ---------- Analysis ----------

@@ -20,12 +20,12 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateEnv, getModelPrimary } from '../lib/env.js';
 import { runExperiment, type ExperimentConfig, type FixtureRecord } from '../lib/runner.js';
 import { buildPrompt, type DecompFixture } from './prompts.js';
+import { loadFixturePaths, buildExperimentConfig } from '../lib/config-builder.js';
 
 export { scoreDecompResponse } from '../exp-j/run-exp-j.js';
 
@@ -60,13 +60,6 @@ function scoreDecompResponseLocal(response: string, fixture: DecompFixture): num
   return 0.0;
 }
 
-// ---------- Load fixtures ----------
-
-async function loadFixturePaths(dir: string): Promise<string[]> {
-  const files = (await readdir(dir)).filter(f => f.endsWith('.json')).sort();
-  return files.map(f => join(dir, f));
-}
-
 // ---------- Build ExperimentConfig ----------
 
 export async function buildConfig(opts: {
@@ -79,26 +72,25 @@ export async function buildConfig(opts: {
 
   const VARIANTS = ['P-minimal/V0', 'P-minimal/V1', 'P-rules/V0', 'P-rules/V1', 'P-full/V0', 'P-full/V1'];
 
-  const config: ExperimentConfig = {
-    variants: Object.fromEntries(VARIANTS.map(v => [v, allPaths])),
-    modelList: [getModelPrimary(), 'claude-sonnet-4-6'],
-    k: opts.k,
-    outDir: opts.outDir,
-    sanityDir,
+  return buildExperimentConfig(
+    {
+      variants: Object.fromEntries(VARIANTS.map(v => [v, allPaths])),
+      modelList: [getModelPrimary(), 'claude-sonnet-4-6'],
+      sanityDir,
 
-    buildPrompt(fixture: FixtureRecord, variant: string): string {
-      // The runner uses 'sanity' as variant key for sanity fixture checks;
-      // fall back to P-rules/V0 for those (replicates Exp-J behaviour).
-      const resolvedVariant = variant === 'sanity' ? 'P-rules/V0' : variant;
-      return buildPrompt(fixture as DecompFixture, resolvedVariant);
+      buildPrompt(fixture: FixtureRecord, variant: string): string {
+        // The runner uses 'sanity' as variant key for sanity fixture checks;
+        // fall back to P-rules/V0 for those (replicates Exp-J behaviour).
+        const resolvedVariant = variant === 'sanity' ? 'P-rules/V0' : variant;
+        return buildPrompt(fixture as DecompFixture, resolvedVariant);
+      },
+
+      scoreResponse(response: string, fixture: FixtureRecord): number {
+        return scoreDecompResponseLocal(response, fixture as DecompFixture);
+      },
     },
-
-    scoreResponse(response: string, fixture: FixtureRecord): number {
-      return scoreDecompResponseLocal(response, fixture as DecompFixture);
-    },
-  };
-
-  return config;
+    opts,
+  );
 }
 
 // ---------- Analysis ----------

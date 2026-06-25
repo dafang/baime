@@ -13,12 +13,12 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractAnswer, scoreResponse } from '../lib/score.js';
 import { validateEnv, getModelPrimary } from '../lib/env.js';
 import { runExperiment, type ExperimentConfig, type FixtureRecord } from '../lib/runner.js';
+import { loadFixturePaths, buildExperimentConfig } from '../lib/config-builder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXP_ROOT = join(__dirname, '..');
@@ -213,20 +213,6 @@ function verdictOnlyScore(extracted: unknown, fixture: BaseFixture): number {
   return scoreForFixture(extracted, fixture);
 }
 
-// ---------- Load fixture file paths for a skill directory ----------
-
-async function loadFixturePaths(dir: string): Promise<string[]> {
-  const files = (await readdir(dir)).filter(f => f.endsWith('.json')).sort();
-  const paths = files.map(f => join(dir, f));
-  // Filter to CLEAR fixtures only (matches original logic)
-  const cleared: string[] = [];
-  for (const p of paths) {
-    const fx = JSON.parse(await readFile(p, 'utf-8')) as { fixtureClass?: string };
-    if (fx.fixtureClass === 'CLEAR') cleared.push(p);
-  }
-  return cleared;
-}
-
 // ---------- Build ExperimentConfig (exported for tests) ----------
 
 export async function buildConfig(opts: {
@@ -238,35 +224,34 @@ export async function buildConfig(opts: {
   const skillContents: Record<string, string> = {};
 
   for (const skill of skillNames) {
-    const paths = await loadFixturePaths(FIXTURE_DIRS[skill]!);
+    const paths = await loadFixturePaths(FIXTURE_DIRS[skill]!, { filterClear: true });
     variants[skill] = paths;
     skillContents[skill] = await readFile(SKILL_PATHS[skill]!, 'utf-8');
   }
 
-  const config: ExperimentConfig = {
-    variants,
-    modelList: [getModelPrimary()],
-    k: opts.k,
-    outDir: opts.outDir,
-    sanityDir: SANITY_FIXTURE_DIR,
+  return buildExperimentConfig(
+    {
+      variants,
+      modelList: [getModelPrimary()],
+      sanityDir: SANITY_FIXTURE_DIR,
 
-    buildPrompt(fixture: FixtureRecord, variant: string): string {
-      const fx = fixture as BaseFixture;
-      const content = skillContents[variant] ?? skillContents[fx.skill] ?? '';
-      if (fx.answerType === 'exact') return buildPromptExact(content, fx);
-      if (fx.answerType === 'set') return buildPromptSet(content, fx);
-      if (fx.answerType === 'partial') return buildPromptPartial(content, fx);
-      return buildPromptExact(content, fx);
+      buildPrompt(fixture: FixtureRecord, variant: string): string {
+        const fx = fixture as BaseFixture;
+        const content = skillContents[variant] ?? skillContents[fx.skill] ?? '';
+        if (fx.answerType === 'exact') return buildPromptExact(content, fx);
+        if (fx.answerType === 'set') return buildPromptSet(content, fx);
+        if (fx.answerType === 'partial') return buildPromptPartial(content, fx);
+        return buildPromptExact(content, fx);
+      },
+
+      scoreResponse(response: string, fixture: FixtureRecord): number {
+        const fx = fixture as BaseFixture;
+        const extracted = extractAnswerForFixture(response, fx);
+        return scoreForFixture(extracted, fx);
+      },
     },
-
-    scoreResponse(response: string, fixture: FixtureRecord): number {
-      const fx = fixture as BaseFixture;
-      const extracted = extractAnswerForFixture(response, fx);
-      return scoreForFixture(extracted, fx);
-    },
-  };
-
-  return config;
+    opts,
+  );
 }
 
 // ---------- Cross-skill variance analysis (Exp-H specific) ----------
