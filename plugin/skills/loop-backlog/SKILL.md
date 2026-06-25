@@ -623,6 +623,19 @@ there are no "other legitimate instances" to protect.
 # Kill any orphaned Monitor tail processes watching this daemon log.
 # Safe because acquireLoopLock() guarantees at most one loop-backlog instance
 # per repo — there are no "other legitimate instances" to protect.
+
+# Step 1: TaskStop any tracked harness-level Monitor task (survives context compression)
+MONITOR_TASK_ID_FILE="${BACKLOG_DIR}/.monitor-task-id"
+if [ -f "$MONITOR_TASK_ID_FILE" ]; then
+  STALE_MONITOR_ID=$(cat "$MONITOR_TASK_ID_FILE" 2>/dev/null || true)
+  if [ -n "$STALE_MONITOR_ID" ]; then
+    echo "[loop-backlog] stopStaleMon: TaskStop harness Monitor $STALE_MONITOR_ID"
+    TaskStop "$STALE_MONITOR_ID" 2>/dev/null || true
+  fi
+  rm -f "$MONITOR_TASK_ID_FILE"
+fi
+
+# Step 2: Kill OS-level tail processes (belt-and-suspenders for orphans)
 pkill -f "tail.*${DAEMON_LOG}" 2>/dev/null || true
 sleep 0.5
 ```
@@ -698,6 +711,12 @@ if [ -f "$ACTIVE_AGENTS_FILE" ]; then
   mv "$ACTIVE_TMP" "$ACTIVE_AGENTS_FILE"
   echo "daemonBootstrap: active-agents reconciled: $(cat "$ACTIVE_AGENTS_FILE" | xargs)"
 fi
+
+# Baseline checkpoint: write current log end-of-file offset BEFORE creating Monitor.
+# This ensures that if context compression occurs during idle Monitor blocking,
+# the next cold-start resumes from this point rather than OFFSET=0.
+echo $(wc -c < "$DAEMON_LOG" 2>/dev/null || echo 0) > "$CHECKPOINT_FILE"
+echo "daemonBootstrap: baseline checkpoint written (offset=$(cat "$CHECKPOINT_FILE"))"
 ```
 
 ### reap
@@ -754,10 +773,18 @@ Monitor tails that file:
 ```bash
 # Foreground tail — Monitor reads its stdout as the event stream.
 # -c +${OFFSET} resumes from the checkpointed byte offset (0 = start of file).
+# IMPORTANT: Before calling Monitor, save the Monitor task ID to .monitor-task-id so
+# stopStaleMon can TaskStop it in the next session (survives context compression).
+# The Monitor harness returns a task ID in its result (e.g. "Monitor started (task bXXXX, ...)").
+# After receiving that confirmation, write: echo "$MONITOR_TASK_ID" > "${BACKLOG_DIR}/.monitor-task-id"
+MONITOR_TASK_ID_FILE="${BACKLOG_DIR}/.monitor-task-id"
 Monitor(persistent=true,
     command="tail -c +${OFFSET} -f \"$DAEMON_LOG\"",
     description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, plan-approved:TASK-N, or heartbeat:TIMESTAMP) has arrived from the backlog task board. heartbeat:TIMESTAMP events are emitted every 60s as no-ops for re-attach. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
   )
+# After Monitor returns its task ID, save it for stopStaleMon in the next session:
+# MONITOR_TASK_ID=$(... extract from Monitor result ...)
+# echo "$MONITOR_TASK_ID" > "$MONITOR_TASK_ID_FILE"
 echo $(wc -c < "$DAEMON_LOG" 2>/dev/null || echo 0) > "$CHECKPOINT_FILE"
 ```
 
@@ -1187,8 +1214,13 @@ if [ -z "$CLAIMED_TASK_IDS" ]; then
   # Dispatch is handled by the Monitor event loop; this bash section exits to let the
   # Monitor dispatch call the appropriate handler function.
   # Example dispatch (in the Monitor event handler):
+  # Filter heartbeat lines — daemon emits these every 60s as keepalive; skip silently
+  # if echo "$EVENT_LINE" | grep -q "^heartbeat:"; then
+  #   echo "[loop-backlog] heartbeat, skipping"
+  #   continue
+  # fi
   #   case "$EVENT" in
-  #     heartbeat:*)         : ;;                                        # no-op: wake-up only
+  #     heartbeat:*)         echo "[loop-backlog] heartbeat, skipping" ;;  # no-op: wake-up only
   #     epic-ready:*)        epicDecompose "${EVENT#epic-ready:}" ;;
   #     child-done:*)        onChildDone "${EVENT#child-done:}" ;;
   #     proposal-approved:*) startPlanDraft "${EVENT#proposal-approved:}" ;;
