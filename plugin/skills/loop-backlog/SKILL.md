@@ -119,8 +119,8 @@ workerLoop() = {
     -- session handles all of them (no separate loop-meta session needed).
     _:      stopStaleMon(),
     event: Monitor(persistent=true,
-        command="tail -c +${OFFSET} -f \"$DAEMON_LOG\"",
-        description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, plan-approved:TASK-N, or heartbeat:TIMESTAMP) has arrived from the backlog task board. heartbeat:TIMESTAMP events are emitted every 60s as no-ops for re-attach. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
+        command="tail -c +${OFFSET} -f \"$DAEMON_LOG\" | grep --line-buffered -E \"^(basic-ready|epic-ready|child-done|proposal-approved|plan-approved):\"",
+        description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, or plan-approved:TASK-N) has arrived from the backlog task board. Heartbeat lines are suppressed by the grep filter. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
       ),
     | stopSentinel()                            → return Stopped
     | event matches "basic-ready:TASK-*"        → workerLoop()              -- re-claim & execute
@@ -128,7 +128,6 @@ workerLoop() = {
     | event matches "child-done:TASK-*"         → onChildDone(extractId(event)); workerLoop()
     | event matches "proposal-approved:TASK-*"  → startPlanDraft(extractId(event)); workerLoop()
     | event matches "plan-approved:TASK-*"      → startFinalise(extractId(event));  workerLoop()
-    | event matches "heartbeat:*"               → workerLoop()              -- no-op: wake-up only
     | otherwise                                 → workerLoop(),             -- noise: loop back
 
   -- Parallel: create worktrees and spawn one background agent per task
@@ -785,8 +784,8 @@ Monitor tails that file:
 # After receiving that confirmation, write: echo "$MONITOR_TASK_ID" > "${BACKLOG_DIR}/.monitor-task-id"
 MONITOR_TASK_ID_FILE="${BACKLOG_DIR}/.monitor-task-id"
 Monitor(persistent=true,
-    command="tail -c +${OFFSET} -f \"$DAEMON_LOG\"",
-    description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, plan-approved:TASK-N, or heartbeat:TIMESTAMP) has arrived from the backlog task board. heartbeat:TIMESTAMP events are emitted every 60s as no-ops for re-attach. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
+    command="tail -c +${OFFSET} -f \"$DAEMON_LOG\" | grep --line-buffered -E \"^(basic-ready|epic-ready|child-done|proposal-approved|plan-approved):\"",
+    description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, or plan-approved:TASK-N) has arrived from the backlog task board. Heartbeat lines are suppressed by the grep filter. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
   )
 # After Monitor returns its task ID, save it for stopStaleMon in the next session:
 # MONITOR_TASK_ID=$(... extract from Monitor result ...)
@@ -1206,8 +1205,8 @@ The top-level orchestration using claimBatch, background Agent spawning, and ser
 if [ -z "$CLAIMED_TASK_IDS" ]; then
   # No basic task to claim — block on the daemon event stream (all five channels).
   # Monitor(persistent=true,
-  #   command="tail -c +${OFFSET} -f \"$DAEMON_LOG\"",
-  #   description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, plan-approved:TASK-N, or heartbeat:TIMESTAMP) has arrived from the backlog task board. heartbeat:TIMESTAMP events are emitted every 60s as no-ops for re-attach. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
+  #   command="tail -c +${OFFSET} -f \"$DAEMON_LOG\" | grep --line-buffered -E \"^(basic-ready|epic-ready|child-done|proposal-approved|plan-approved):\"",
+  #   description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, or plan-approved:TASK-N) has arrived from the backlog task board. Heartbeat lines are suppressed by the grep filter. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
   # )
   # After Monitor returns, record the new checkpoint offset:
   # echo $(wc -c < "$DAEMON_LOG" 2>/dev/null || echo 0) > "$CHECKPOINT_FILE"
@@ -1216,17 +1215,11 @@ if [ -z "$CLAIMED_TASK_IDS" ]; then
   # On child-done:TASK-N       → onChildDone(extractId), then re-enter workerLoop.
   # On proposal-approved:TASK-N → startPlanDraft(extractId), then re-enter workerLoop.
   # On plan-approved:TASK-N    → startFinalise(extractId), then re-enter workerLoop.
-  # On heartbeat:TIMESTAMP     → no-op: wake-up only, re-enter workerLoop.
+  # Heartbeat lines are suppressed by the grep filter and never reach Monitor.
   # Dispatch is handled by the Monitor event loop; this bash section exits to let the
   # Monitor dispatch call the appropriate handler function.
   # Example dispatch (in the Monitor event handler):
-  # Filter heartbeat lines — daemon emits these every 60s as keepalive; skip silently
-  # if echo "$EVENT_LINE" | grep -q "^heartbeat:"; then
-  #   echo "[loop-backlog] heartbeat, skipping"
-  #   continue
-  # fi
   #   case "$EVENT" in
-  #     heartbeat:*)         echo "[loop-backlog] heartbeat, skipping" ;;  # no-op: wake-up only
   #     epic-ready:*)        epicDecompose "${EVENT#epic-ready:}" ;;
   #     child-done:*)        onChildDone "${EVENT#child-done:}" ;;
   #     proposal-approved:*) startPlanDraft "${EVENT#proposal-approved:}" ;;
@@ -1837,14 +1830,16 @@ Use the following Monitor call to wait for daemon events:
 
 ```
 Monitor(persistent=true,
-    command="tail -c +${OFFSET} -f \"$DAEMON_LOG\"",
-    description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, plan-approved:TASK-N, or heartbeat:TIMESTAMP) has arrived from the backlog task board. heartbeat:TIMESTAMP events are emitted every 60s as no-ops for re-attach. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
+    command="tail -c +${OFFSET} -f \"$DAEMON_LOG\" | grep --line-buffered -E \"^(basic-ready|epic-ready|child-done|proposal-approved|plan-approved):\"",
+    description="loop-backlog daemon notification. An event line (basic-ready:TASK-N, epic-ready:TASK-N, child-done:TASK-N, proposal-approved:TASK-N, or plan-approved:TASK-N) has arrived from the backlog task board. Heartbeat lines are suppressed by the grep filter. If this is a new Claude session, invoke /loop-backlog in the project root to resume the worker loop — it will re-claim and dispatch this event automatically."
   )
 ```
 
 The daemon appends event lines to `backlog/.basic-daemon.log`; `tail -c +${OFFSET} -f`
-runs in the foreground so Monitor receives each line as an event immediately (resuming from
-the checkpointed byte offset to prevent stale event replay on restart).
+piped through `grep --line-buffered` runs in the foreground so Monitor receives only
+actionable event lines immediately (resuming from the checkpointed byte offset to prevent
+stale event replay on restart). Heartbeat lines are filtered out at this layer to prevent
+idle notifications every 60s.
 The daemon subprocess exits only when `backlog/.loop-stop` is written (or the parent process dies).
 
 ## GCL Drift Alerting
