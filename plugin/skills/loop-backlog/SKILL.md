@@ -49,6 +49,12 @@ contracts:
     target: self
   - grep: "stopStaleMon"
     target: self
+  - grep: "TaskStop"
+    target: self
+  - grep: "monitor-task-id"
+    target: self
+  - grep: "baseline checkpoint"
+    target: self
 ---
 
 λ() → workerLoop()
