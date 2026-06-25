@@ -10,3 +10,4 @@ backlog/.loop-checkpoint
 backlog/.merge-lock
 backlog/.active-agents
 /.agent-done-*
+/.agent-summary-*
